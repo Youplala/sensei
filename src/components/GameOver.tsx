@@ -160,7 +160,7 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
                         </span>
                       </div>
                       <span className="text-sm font-semibold">
-                        {(word.similarity_score * 100).toFixed(1)}°
+                        {(word.similarity_score).toFixed(1)}°
                       </span>
                     </div>
                   ))}

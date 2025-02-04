@@ -140,7 +140,7 @@ async function recordGuess(word: string, temperature: number, sessionId: string)
 
     if (!todayData?.id) return;
 
-    // Record the guess
+    // Record the guess (temperature is already in percentage form)
     await supabase
       .from('user_guesses')
       .insert({
@@ -164,15 +164,6 @@ export async function checkWord(word: string, sessionId: string, validWords: Wor
     };
   }
 
-  // Development mode or no Supabase client
-  if (!supabase) {
-    const mockTemp = Math.random() * 100;
-    return {
-      word,
-      temperature: mockTemp
-    };
-  }
-
   // Validate word locally first
   if (!validWords.has(word.toLowerCase())) {
     return {
@@ -183,107 +174,32 @@ export async function checkWord(word: string, sessionId: string, validWords: Wor
   }
 
   try {
-    // Get today's word
-    const { data: todayData, error: todayError } = await supabase
-      .from('daily_words')
-      .select('word, id')
-      .eq('date', new Date().toISOString().split('T')[0])
-      .single();
+    const response = await fetch('/api/score', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ word: word.toLowerCase() })
+    });
 
-    if (todayError) {
-      console.error('Error getting today\'s word:', todayError);
+    if (!response.ok) {
+      const error = await response.json();
       return {
         word,
         temperature: 0,
-        error: 'Erreur lors de la vérification du mot'
+        error: error.message || 'Erreur lors de la vérification du mot'
       };
     }
 
-    if (!todayData?.word) {
-      console.error('No word found for today');
-      return {
-        word,
-        temperature: 0,
-        error: 'Erreur: pas de mot du jour'
-      };
-    }
+    const { score } = await response.json();
+    
+    // Record the guess
+    await recordGuess(word, score, sessionId);
 
-    // If the word is the same as today's word
-    if (word.toLowerCase() === todayData.word.toLowerCase()) {
-      const result = {
-        word,
-        temperature: 100
-      };
-      
-      // Record successful guess
-      await supabase
-        .from('user_guesses')
-        .insert({
-          session_id: sessionId,
-          word: word.toLowerCase(),
-          daily_word_id: todayData.id,
-          temperature: 100
-        });
-        
-      return result;
-    }
-
-    // Query similarity
-    const { data: similarityData, error: similarityError } = await supabase
-      .from('word_similarities')
-      .select('similarity_score')
-      .eq('word1', todayData.word)
-      .eq('word2', word.toLowerCase())
-      .single();
-
-    if (similarityError && similarityError.code !== 'PGRST116') { // Ignore not found error
-      console.error('Error getting similarity:', similarityError);
-      return {
-        word,
-        temperature: 0,
-        error: 'Erreur lors de la vérification du mot'
-      };
-    }
-
-    // If we have a similarity score
-    if (similarityData?.similarity_score !== undefined) {
-      const temperature = similarityData.similarity_score * 100;
-      const result = {
-        word,
-        temperature
-      };
-
-      // Record guess with similarity
-      await supabase
-        .from('user_guesses')
-        .insert({
-          session_id: sessionId,
-          word: word.toLowerCase(),
-          daily_word_id: todayData.id,
-          temperature
-        });
-
-      return result;
-    }
-
-    // Word is valid but no similarity score found
-    const result = {
+    return {
       word,
-      temperature: 0
+      temperature: score
     };
-
-    // Record guess with no similarity
-    await supabase
-      .from('user_guesses')
-      .insert({
-        session_id: sessionId,
-        word: word.toLowerCase(),
-        daily_word_id: todayData.id,
-        temperature: 0
-      });
-
-    return result;
-
   } catch (error) {
     console.error('Error checking word:', error);
     return {
@@ -295,30 +211,28 @@ export async function checkWord(word: string, sessionId: string, validWords: Wor
 }
 
 export async function getTopWords(): Promise<{ word: string; similarity_score: number }[]> {
-  if (!supabase) {
-    // Mock response for development
-    return Array.from({ length: 100 }, (_, i) => ({
-      word: `mot${i + 1}`,
-      similarity_score: 100 - (i * 0.5),
-    }));
-  }
-
   try {
-    const { data, error } = await supabase
-      .from('word_similarities')
-      .select('word2, similarity_score')
-      .order('similarity_score', { ascending: false })
-      .limit(100);
-
-    if (error) throw error;
-
-    return (data || []).map(item => ({
-      word: item.word2,
-      similarity_score: item.similarity_score,
-    }));
+    console.log('Fetching top words from API...');
+    // Use absolute URL to ensure correct path
+    const response = await fetch('/api/top-words', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Error from top words API:', error);
+      throw new Error('Failed to fetch top words');
+    }
+    
+    const data = await response.json();
+    console.log(`Received ${data.length} top words from API`);
+    return data;
   } catch (error) {
     console.error('Error getting top words:', error);
-    throw error;
+    return [];
   }
 }
 
