@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Semantic Word Game
 
-## Getting Started
+A French word guessing game based on semantic proximity, inspired by games like Semantle. Players try to guess a secret word by entering words that are semantically related, receiving feedback in the form of temperature (semantic similarity) and progress indicators.
 
-First, run the development server:
+## Features
 
+- Daily word challenge that updates at midnight (US Pacific Time)
+- Semantic similarity scoring using advanced NLP techniques
+- Progress bar indicating proximity to the target word
+- Private rooms for playing with friends
+- Beautiful, modern UI with smooth animations
+- Mobile-friendly design
+
+## Technical Stack
+
+- **Frontend**: Next.js 14, TailwindCSS, DaisyUI, Framer Motion
+- **Backend**: Supabase (PostgreSQL + Auth)
+- **NLP**: spaCy with French language model for semantic analysis
+
+## Setup
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Set up Supabase:
+- Create a new Supabase project
+- Run the schema.sql file in the Supabase SQL editor
+- Copy your Supabase credentials
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Create a .env.local file with your Supabase credentials:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Run the development server:
+```bash
+npm run dev
+```
 
-## Learn More
+## Word Similarity Computation
 
-To learn more about Next.js, take a look at the following resources:
+To compute word similarities for the game:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Install Python dependencies:
+```bash
+cd scripts
+pip install -r requirements.txt
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2. Prepare a text file with French words (one per line)
 
-## Deploy on Vercel
+3. Run the similarity computation script:
+```bash
+python compute_similarities.py input_words.txt output_similarities.json
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. Import the generated similarities into Supabase using the provided SQL functions
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Development
+
+The project structure is organized as follows:
+
+- `/src/components` - React components
+- `/src/app` - Next.js app router pages
+- `/supabase` - Database schema and functions
+- `/scripts` - Python scripts for word processing
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+MIT
