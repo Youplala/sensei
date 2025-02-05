@@ -7,8 +7,8 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 interface TodaysWordResponse {
   word: string;
-  total_players: number;
-  found_today: number;
+  totalPlayers: number;
+  foundToday: number;
 }
 
 export let supabase: ReturnType<typeof createClient<Database>> | null = null;
@@ -23,8 +23,8 @@ export async function getTodaysWord(): Promise<TodaysWordResponse> {
     // Development fallback
     return {
       word: 'montée',
-      total_players: 100,
-      found_today: 10
+      totalPlayers: 100,
+      foundToday: 10
     };
   }
 
@@ -37,8 +37,8 @@ export async function getTodaysWord(): Promise<TodaysWordResponse> {
       // Development fallback on error
       return {
         word: 'montée',
-        total_players: 100,
-        found_today: 10
+        totalPlayers: 100,
+        foundToday: 10
       };
     }
 
@@ -47,23 +47,23 @@ export async function getTodaysWord(): Promise<TodaysWordResponse> {
       // Development fallback when no data
       return {
         word: 'montée',
-        total_players: 100,
-        found_today: 10
+        totalPlayers: 100,
+        foundToday: 10
       };
     }
 
     return {
       word: data.word || 'montée',
-      total_players: data.total_players || 0,
-      found_today: data.found_today || 0
+      totalPlayers: data.totalPlayers || 0,
+      foundToday: data.foundToday || 0
     };
   } catch (error) {
     console.error('Error getting today\'s word:', error);
     // Development fallback on error
     return {
       word: 'montée',
-      total_players: 100,
-      found_today: 10
+      totalPlayers: 100,
+      foundToday: 10
     };
   }
 }
@@ -236,11 +236,11 @@ export async function getTopWords(): Promise<{ word: string; similarity_score: n
   }
 }
 
-export async function getTodaysStats(): Promise<{ total_players: number; found_today: number }> {
+export async function getTodaysStats(): Promise<{ totalPlayers: number; foundToday: number }> {
   if (!supabase) {
     return {
-      total_players: 0,
-      found_today: 0
+      totalPlayers: 0,
+      foundToday: 0
     };
   }
 
@@ -262,15 +262,15 @@ export async function getTodaysStats(): Promise<{ total_players: number; found_t
     if (error) {
       console.error('Error getting stats:', error);
       return {
-        total_players: 0,
-        found_today: 0
+        totalPlayers: 0,
+        foundToday: 0
       };
     }
 
     if (!data || !data.user_guesses) {
       return {
-        total_players: 0,
-        found_today: 0
+        totalPlayers: 0,
+        foundToday: 0
       };
     }
 
@@ -282,14 +282,14 @@ export async function getTodaysStats(): Promise<{ total_players: number; found_t
     );
 
     return {
-      total_players: uniqueSessions.size,
-      found_today: foundSessions.size
+      totalPlayers: uniqueSessions.size,
+      foundToday: foundSessions.size
     };
   } catch (error) {
     console.error('Error getting stats:', error);
     return {
-      total_players: 0,
-      found_today: 0
+      totalPlayers: 0,
+      foundToday: 0
     };
   }
 }

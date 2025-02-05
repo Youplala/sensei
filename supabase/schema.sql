@@ -27,7 +27,7 @@ CREATE TABLE word_similarities (
     UNIQUE(word1, word2)
 );
 
--- User guesses table
+-- User guesses table for daily words
 CREATE TABLE user_guesses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     session_id TEXT NOT NULL,
@@ -40,21 +40,37 @@ CREATE TABLE user_guesses (
 -- Private rooms table
 CREATE TABLE private_rooms (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    room_code TEXT NOT NULL UNIQUE,
-    custom_word TEXT NOT NULL,
-    created_by TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    word TEXT NOT NULL REFERENCES valid_words(word),
+    created_by_name TEXT NOT NULL,
+    created_by_session_id TEXT NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_finished BOOLEAN DEFAULT FALSE
+);
+
+-- Private room players table
+CREATE TABLE private_room_players (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID REFERENCES private_rooms(id) ON DELETE CASCADE,
+    player_name TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    has_found BOOLEAN DEFAULT FALSE,
+    found_at TIMESTAMP WITH TIME ZONE,
+    guesses_count INTEGER DEFAULT 0,
+    best_temperature FLOAT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_active_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(room_id, session_id)
 );
 
 -- Private room guesses table
 CREATE TABLE private_room_guesses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    room_id UUID REFERENCES private_rooms(id),
-    session_id TEXT NOT NULL,
+    room_id UUID REFERENCES private_rooms(id) ON DELETE CASCADE,
+    player_id UUID REFERENCES private_room_players(id) ON DELETE CASCADE,
     word TEXT NOT NULL,
     temperature FLOAT NOT NULL,
-    progress INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -62,91 +78,127 @@ CREATE TABLE private_room_guesses (
 CREATE INDEX idx_daily_words_date ON daily_words(date);
 CREATE INDEX idx_word_similarities_words ON word_similarities(word1, word2);
 CREATE INDEX idx_user_guesses_daily_word ON user_guesses(daily_word_id);
+CREATE INDEX idx_private_rooms_code ON private_rooms(code);
+CREATE INDEX idx_private_room_players_room ON private_room_players(room_id);
 CREATE INDEX idx_private_room_guesses_room ON private_room_guesses(room_id);
+CREATE INDEX idx_private_room_players_session ON private_room_players(session_id);
 
--- Create function to get today's word
-CREATE OR REPLACE FUNCTION get_todays_word()
-RETURNS TABLE (
-    word TEXT,
-    total_players BIGINT,
-    found_today BIGINT
+-- Function to create a private room
+CREATE OR REPLACE FUNCTION create_private_room(
+    player_name TEXT,
+    session_id TEXT
+) RETURNS TABLE (
+    room_id UUID,
+    room_code TEXT,
+    word TEXT
 ) AS $$
 DECLARE
-    today_word TEXT;
+    random_word TEXT;
+    room_code TEXT;
 BEGIN
-    -- First try to get today's word
-    SELECT dw.word INTO today_word
-    FROM daily_words dw
-    WHERE dw.date = CURRENT_DATE;
+    -- Get a random word
+    SELECT word INTO random_word
+    FROM valid_words
+    ORDER BY RANDOM()
+    LIMIT 1;
 
-    -- If no word exists for today, insert a default one
-    IF today_word IS NULL THEN
-        today_word := 'montée';
-        INSERT INTO daily_words (word, date) 
-        VALUES (today_word, CURRENT_DATE)
-        ON CONFLICT (date) DO NOTHING;
-    END IF;
+    -- Generate a unique 6-character code
+    room_code := UPPER(SUBSTRING(MD5(NOW()::TEXT || RANDOM()::TEXT) FROM 1 FOR 6));
 
-    -- Return the word with stats
-    RETURN QUERY
-    SELECT 
-        dw.word,
-        COALESCE(COUNT(DISTINCT ug.session_id), 0) as total_players,
-        COALESCE(COUNT(DISTINCT CASE WHEN ug.temperature = 100 THEN ug.session_id END), 0) as found_today
-    FROM daily_words dw
-    LEFT JOIN user_guesses ug ON dw.id = ug.daily_word_id
-    WHERE dw.date = CURRENT_DATE
-    GROUP BY dw.word;
+    -- Create the room
+    INSERT INTO private_rooms (code, word, created_by_name, created_by_session_id, expires_at)
+    VALUES (room_code, random_word, player_name, session_id, NOW() + INTERVAL '24 hours')
+    RETURNING id, code, word INTO room_id, room_code, random_word;
 
-    -- If still no results (shouldn't happen), return default values
-    IF NOT FOUND THEN
-        RETURN QUERY SELECT 
-            today_word::TEXT,
-            0::BIGINT,
-            0::BIGINT;
-    END IF;
+    -- Add the creator as first player
+    INSERT INTO private_room_players (room_id, player_name, session_id)
+    VALUES (room_id, player_name, session_id);
+
+    RETURN QUERY SELECT room_id, room_code, random_word;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create function to get today's stats
-CREATE OR REPLACE FUNCTION get_todays_stats()
-RETURNS TABLE (
-    total_players BIGINT,
-    found_today BIGINT
+-- Function to join a private room
+CREATE OR REPLACE FUNCTION join_private_room(
+    room_code TEXT,
+    player_name TEXT,
+    session_id TEXT
+) RETURNS TABLE (
+    room_id UUID,
+    word TEXT,
+    created_by_name TEXT,
+    player_count INTEGER
 ) AS $$
+DECLARE
+    v_room_id UUID;
+    v_word TEXT;
+    v_created_by_name TEXT;
+    v_player_count INTEGER;
 BEGIN
+    -- Get room info
+    SELECT id, word, created_by_name
+    INTO v_room_id, v_word, v_created_by_name
+    FROM private_rooms
+    WHERE code = room_code
+    AND expires_at > NOW()
+    AND NOT is_finished;
+
+    IF v_room_id IS NULL THEN
+        RAISE EXCEPTION 'Room not found or expired';
+    END IF;
+
+    -- Add player if not already in room
+    INSERT INTO private_room_players (room_id, player_name, session_id)
+    VALUES (v_room_id, player_name, session_id)
+    ON CONFLICT (room_id, session_id) 
+    DO UPDATE SET player_name = EXCLUDED.player_name, last_active_at = NOW();
+
+    -- Get player count
+    SELECT COUNT(*) INTO v_player_count
+    FROM private_room_players
+    WHERE room_id = v_room_id;
+
     RETURN QUERY
-    SELECT 
-        COUNT(DISTINCT ug.session_id) as total_players,
-        COUNT(DISTINCT CASE WHEN ug.temperature = 100 THEN ug.session_id END) as found_today
-    FROM daily_words dw
-    LEFT JOIN user_guesses ug ON dw.id = ug.daily_word_id
-    WHERE dw.date = CURRENT_DATE;
+    SELECT v_room_id, v_word, v_created_by_name, v_player_count;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create function to check word validity and get similarity
-CREATE OR REPLACE FUNCTION check_word(input_word TEXT, target_word TEXT)
-RETURNS TABLE (
-    is_valid BOOLEAN,
-    similarity_score FLOAT
+-- Function to get room status
+CREATE OR REPLACE FUNCTION get_room_status(
+    p_room_id UUID,
+    p_session_id TEXT
+) RETURNS TABLE (
+    word TEXT,
+    is_finished BOOLEAN,
+    player_name TEXT,
+    player_count INTEGER,
+    found_count INTEGER,
+    has_found BOOLEAN,
+    created_by_name TEXT
 ) AS $$
 BEGIN
     RETURN QUERY
-    WITH validity AS (
-        SELECT EXISTS (
-            SELECT 1 FROM valid_words WHERE word = input_word
-        ) as is_valid
-    ),
-    similarity AS (
-        SELECT COALESCE(ws.similarity_score, 0) as similarity_score
-        FROM validity
-        LEFT JOIN word_similarities ws 
-        ON ws.word1 = target_word AND ws.word2 = input_word
+    WITH room_stats AS (
+        SELECT 
+            r.word,
+            r.is_finished,
+            r.created_by_name,
+            COUNT(DISTINCT p.id) as player_count,
+            COUNT(DISTINCT CASE WHEN p.has_found THEN p.id END) as found_count
+        FROM private_rooms r
+        LEFT JOIN private_room_players p ON p.room_id = r.id
+        WHERE r.id = p_room_id
+        GROUP BY r.word, r.is_finished, r.created_by_name
     )
     SELECT 
-        validity.is_valid,
-        similarity.similarity_score
-    FROM validity, similarity;
+        rs.word,
+        rs.is_finished,
+        p.player_name,
+        rs.player_count,
+        rs.found_count,
+        p.has_found,
+        rs.created_by_name
+    FROM room_stats rs
+    LEFT JOIN private_room_players p ON p.room_id = p_room_id AND p.session_id = p_session_id;
 END;
 $$ LANGUAGE plpgsql;

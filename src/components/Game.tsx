@@ -7,14 +7,15 @@ import { WordTrie } from '@/lib/wordTrie';
 import { checkWord, getValidWords, getTodaysStats } from '@/lib/supabase';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { getCurrentDay } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { GameOver } from './GameOver';
+import { CreateRoomModal } from './CreateRoomModal';
 
 interface GameProps {
   word: string;
   totalPlayers: number;
   foundToday: number;
+  roomCode?: string;
+  playerName?: string;
 }
 
 interface GuessData {
@@ -45,17 +46,22 @@ const getProgressBarColor = (temp: number) => {
   return 'bg-temp-cold';
 };
 
-export const Game = ({ word, totalPlayers = 0, foundToday = 0 }: GameProps) => {
+export const Game = ({ word, totalPlayers = 0, foundToday = 0, roomCode, playerName }: GameProps) => {
   const [guess, setGuess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [validWords, setValidWords] = useState<WordTrie>(new WordTrie());
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const [stats, setStats] = useState({ totalPlayers, foundToday });
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Use local storage for guesses and game state
-  const storageKey = `semantic-word-game-${getCurrentDay()}`;
+  const storageKey = `semantic-word-game-${getCurrentDay()}${roomCode ? `-${roomCode}` : ''}`;
   const [gameState, setGameState] = useLocalStorage<{
     guesses: GuessData[];
     found: boolean;
@@ -101,26 +107,27 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0 }: GameProps) => {
   // Load valid words on mount
   useEffect(() => {
     async function loadValidWords() {
-      const words = await getValidWords();
-      setValidWords(words);
+      try {
+        const words = await getValidWords();
+        setValidWords(words);
+      } catch (error) {
+        console.error('Error loading valid words:', error);
+      }
     }
     loadValidWords();
-    setMounted(true);
   }, []);
 
-  // Focus input on mount
+  // Focus input when component is ready
   useEffect(() => {
-    if (mounted) {
-      focusInput();
-    }
-  }, [mounted, focusInput]);
+    focusInput();
+  }, [focusInput]);
 
   // Refresh stats periodically
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const { total_players, found_today } = await getTodaysStats();
-        setStats({ totalPlayers: Number(total_players), foundToday: Number(found_today) });
+        const { totalPlayers, foundToday } = await getTodaysStats();
+        setStats({ totalPlayers: Number(totalPlayers), foundToday: Number(foundToday) });
       } catch (error) {
         console.error('Error fetching stats:', error);
       }
@@ -196,8 +203,8 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0 }: GameProps) => {
       if (word && trimmedGuess.toLowerCase() === word.toLowerCase()) {
         setGameState(prev => ({ ...prev, found: true }));
         toast.success('Félicitations! Vous avez trouvé le mot!');
-        const { total_players, found_today } = await getTodaysStats();
-        setStats({ totalPlayers: Number(total_players), foundToday: Number(found_today) });
+        const { totalPlayers, foundToday } = await getTodaysStats();
+        setStats({ totalPlayers: Number(totalPlayers), foundToday: Number(foundToday) });
       }
 
       setGuess('');
@@ -212,45 +219,42 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0 }: GameProps) => {
     }
   };
 
-  if (!mounted) {
-    return null; // Prevent hydration issues
-  }
-
   return (
-    <div 
-      className="container mx-auto px-4 py-8 max-w-4xl"
-      // Ensure clicks anywhere in the container focus the input
-      onClick={(e) => {
-        const target = e.target as HTMLElement;
-        if (!target.matches('input, textarea, [contenteditable], button')) {
-          focusInput();
-        }
-      }}
-    >
-      <motion.div 
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="text-center mb-8"
-      >
-        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
-          Sensei
+    <div className="container mx-auto px-4 py-8 max-w-2xl">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl font-bold bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent mb-4 animate-pulse">
+          Sensei 🎯
         </h1>
-        <div className="flex justify-center items-center gap-4 mb-4">
-          <div className="stats shadow">
-            <div className="stat">
-              <div className="stat-title">Essais</div>
-              <div className="stat-value text-primary">{guesses.length}</div>
-            </div>
-            <div className="stat">
-              <div className="stat-title">Trouvé aujourd'hui</div>
-              <div className="stat-value text-secondary">{stats.foundToday}</div>
-            </div>
+        <div className="flex justify-center items-center space-x-3 text-sm mb-4">
+          <div className="bg-gradient-to-br from-pink-100 to-purple-100 rounded-lg px-4 py-2 shadow-lg border border-purple-200">
+            <span className="font-semibold">{isClient ? guesses.length : 0}</span>
+            <span className="text-base-content/70"> essais 🎲</span>
+          </div>
+          <div className="bg-gradient-to-br from-purple-100 to-indigo-100 rounded-lg px-4 py-2 shadow-lg border border-indigo-200">
+            <span className="font-semibold">{isClient ? stats.foundToday : foundToday}</span>
+            <span className="text-base-content/70"> ont trouvé 🎉</span>
+          </div>
+          <div className="bg-gradient-to-br from-indigo-100 to-blue-100 rounded-lg px-4 py-2 shadow-lg border border-blue-200">
+            <span className="font-semibold">
+              {isClient ? Math.round((stats.foundToday / stats.totalPlayers) * 100) : 0}%
+            </span>
+            <span className="text-base-content/70"> taux de réussite ⭐️</span>
           </div>
         </div>
-        <p className="text-sm text-gray-500">
-          Prochain mot dans {formatDistanceToNow(new Date().setHours(24, 0, 0, 0), { locale: fr })}
-        </p>
-      </motion.div>
+        {!roomCode && (
+          <button
+            onClick={() => setShowCreateRoomModal(true)}
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 text-white font-medium hover:opacity-90 transition-opacity shadow-lg"
+          >
+            Créer une partie privée 🤝
+          </button>
+        )}
+        {roomCode && playerName && (
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Joueur: {playerName} 👋
+          </div>
+        )}
+      </header>
 
       <form onSubmit={handleGuess} className="mb-8">
         <div className="flex gap-2">
@@ -258,7 +262,7 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0 }: GameProps) => {
             ref={inputRef}
             type="text"
             value={guess}
-            onChange={(e) => setGuess(e.target.value)}
+            onChange={(e) => setGuess(e.target.value.toLowerCase())}
             className="input input-bordered flex-1 bg-white shadow-sm focus:ring-2 focus:ring-primary"
             placeholder="Entrez votre mot..."
             disabled={found || isLoading}
@@ -276,7 +280,7 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0 }: GameProps) => {
 
       <div className="space-y-2">
         <AnimatePresence mode="popLayout">
-          {sortedGuesses.map((guess) => (
+          {isClient && sortedGuesses.map((guess) => (
             <motion.div
               key={guess.id}
               layout
@@ -319,6 +323,11 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0 }: GameProps) => {
           />
         )}
       </AnimatePresence>
+
+      <CreateRoomModal
+        isOpen={showCreateRoomModal}
+        onClose={() => setShowCreateRoomModal(false)}
+      />
     </div>
   );
 };
