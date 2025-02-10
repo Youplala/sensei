@@ -1,77 +1,60 @@
 # Semantic Word Game
 
-A French word guessing game based on semantic proximity, inspired by games like Semantle. Players try to guess a secret word by entering words that are semantically related, receiving feedback in the form of temperature (semantic similarity) and progress indicators.
+A word game where players try to guess a target word using semantic similarity. Each guess is scored based on how semantically similar it is to the target word.
 
 ## Features
 
-- Daily word challenge that updates at midnight (US Pacific Time)
-- Semantic similarity scoring using advanced NLP techniques
-- Progress bar indicating proximity to the target word
-- Private rooms for playing with friends
-- Beautiful, modern UI with smooth animations
-- Mobile-friendly design
+- Daily word challenge
+- Semantic similarity scoring
+- Word validation
+- Beautiful UI with animations
+- Multiplayer mode with private rooms
 
-## Technical Stack
+## Tech Stack
 
-- **Frontend**: Next.js 14, TailwindCSS, DaisyUI, Framer Motion
-- **Backend**: Supabase (PostgreSQL + Auth)
-- **NLP**: spaCy with French language model for semantic analysis
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **Game Logic**: In-memory word storage and similarity calculations
+- **UI Components**: Framer Motion for animations
 
-## Setup
+## Getting Started
 
-1. Install dependencies:
+1. Clone the repository and install dependencies:
 ```bash
+git clone https://github.com/yourusername/semantic-word-game.git
+cd semantic-word-game
 npm install
 ```
 
-2. Set up Supabase:
-- Create a new Supabase project
-- Run the schema.sql file in the Supabase SQL editor
-- Copy your Supabase credentials
-
-3. Create a .env.local file with your Supabase credentials:
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-4. Run the development server:
+2. Start the development server:
 ```bash
 npm run dev
 ```
 
-## Word Similarity Computation
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-To compute word similarities for the game:
+## Game Rules
 
-1. Install Python dependencies:
-```bash
-cd scripts
-pip install -r requirements.txt
-```
+1. Try to guess the target word of the day
+2. Each guess will be scored based on its semantic similarity to the target word
+3. The closer your guess is semantically to the target word, the higher your score
+4. Keep guessing until you find the exact word!
 
-2. Prepare a text file with French words (one per line)
+## Project Structure
 
-3. Run the similarity computation script:
-```bash
-python compute_similarities.py input_words.txt output_similarities.json
-```
-
-4. Import the generated similarities into Supabase using the provided SQL functions
-
-## Development
-
-The project structure is organized as follows:
-
-- `/src/components` - React components
-- `/src/app` - Next.js app router pages
-- `/supabase` - Database schema and functions
-- `/scripts` - Python scripts for word processing
+- `/src`
+  - `/app` - Next.js app router pages
+  - `/components` - React components
+  - `/lib` - Game logic and utilities
+  - `/types` - TypeScript type definitions
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.

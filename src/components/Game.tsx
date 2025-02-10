@@ -3,165 +3,51 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
-import { WordTrie } from '@/lib/wordTrie';
-import { checkWord, getValidWords, getTodaysStats } from '@/lib/supabase';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { getCurrentDay } from '@/lib/utils';
 import { GameOver } from './GameOver';
-import { CreateRoomModal } from './CreateRoomModal';
+import { formatRank, getProgressBarColor, getTemperatureColor, getTemperatureEmoji } from '@/lib/utils';
 
 interface GameProps {
   word: string;
-  totalPlayers: number;
-  foundToday: number;
-  roomCode?: string;
-  playerName?: string;
+  totalPlayers?: number;
+  foundToday?: number;
 }
 
 interface GuessData {
   word: string;
-  temperature: number;
+  similarity: number;
+  rank: number | null;
   id: string;
   isNew?: boolean;
+  timestamp?: number;
+  isLastGuess?: boolean;
 }
 
-const getTemperatureColor = (temp: number) => {
-  if (temp >= 75) return 'text-temp-hot';
-  if (temp >= 50) return 'text-temp-warm';
-  if (temp >= 25) return 'text-temp-mild';
-  return 'text-temp-cold';
-};
 
-const getTemperatureEmoji = (temp: number) => {
-  if (temp >= 75) return '🔥';
-  if (temp >= 50) return '🌡️';
-  if (temp >= 25) return '❄️';
-  return '🧊';
-};
 
-const getProgressBarColor = (temp: number) => {
-  if (temp >= 75) return 'bg-temp-hot';
-  if (temp >= 50) return 'bg-temp-warm';
-  if (temp >= 25) return 'bg-temp-mild';
-  return 'bg-temp-cold';
-};
-
-export const Game = ({ word, totalPlayers = 0, foundToday = 0, roomCode, playerName }: GameProps) => {
+export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
   const [guess, setGuess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [validWords, setValidWords] = useState<WordTrie>(new WordTrie());
-  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
-  const [stats, setStats] = useState({ totalPlayers, foundToday });
-  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [stats, setStats] = useState({ solvers: foundToday, totalPlayers, successRate: 0 });
   const [isClient, setIsClient] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [guessHistory, setGuessHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
   // Use local storage for guesses and game state
-  const storageKey = `semantic-word-game-${getCurrentDay()}${roomCode ? `-${roomCode}` : ''}`;
-  const [gameState, setGameState] = useLocalStorage<{
+  const storageKey = `semantic-word-game-daily-${new Date().toISOString().split('T')[0]}`;
+  const [gameState, setGameState] = useState<{
     guesses: GuessData[];
     found: boolean;
-  }>(storageKey, {
+  }>({
     guesses: [],
-    found: false,
+    found: false
   });
 
   const { guesses, found } = gameState;
-
-  // Sort guesses by temperature
-  const sortedGuesses = [...guesses].sort((a, b) => b.temperature - a.temperature);
-
-  const focusInput = useCallback(() => {
-    if (!found) {
-      // Force focus with a small delay to ensure it works after animations
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 10);
-    }
-  }, [found]);
-
-  // Keep focus when window regains focus
-  useEffect(() => {
-    const handleFocus = () => focusInput();
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [focusInput]);
-
-  // Keep focus when clicking anywhere in the game
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // Don't steal focus from other input elements
-      if (!target.matches('input, textarea, [contenteditable]')) {
-        focusInput();
-      }
-    };
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [focusInput]);
-
-  // Load valid words on mount
-  useEffect(() => {
-    async function loadValidWords() {
-      try {
-        const words = await getValidWords();
-        setValidWords(words);
-      } catch (error) {
-        console.error('Error loading valid words:', error);
-      }
-    }
-    loadValidWords();
-  }, []);
-
-  // Focus input when component is ready
-  useEffect(() => {
-    focusInput();
-  }, [focusInput]);
-
-  // Refresh stats periodically
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const { totalPlayers, foundToday } = await getTodaysStats();
-        setStats({ totalPlayers: Number(totalPlayers), foundToday: Number(foundToday) });
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      }
-    };
-
-    // Initial fetch
-    fetchStats();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Handle keyboard events globally
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // If any text input or textarea is not focused and a letter key is pressed
-      if (
-        !found &&
-        document.activeElement?.tagName !== 'INPUT' &&
-        document.activeElement?.tagName !== 'TEXTAREA' &&
-        e.key.length === 1 &&
-        e.key.match(/[a-zA-Z]/)
-      ) {
-        e.preventDefault(); // Prevent the key from being typed before focus
-        inputRef.current?.focus();
-        // Re-add the key that was pressed
-        setGuess(prev => prev + e.key);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [found]);
 
   const handleGuess = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,7 +56,7 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0, roomCode, playerN
 
     // Check if word was already guessed
     if (guesses.some(g => g.word.toLowerCase() === trimmedGuess.toLowerCase())) {
-      toast.error('Vous avez déjà essayé ce mot !');
+      toast.error(`Vous avez déjà essayé le mot "${trimmedGuess}" !`);
       setGuess('');
       focusInput();
       return;
@@ -178,46 +64,149 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0, roomCode, playerN
 
     try {
       setIsLoading(true);
-      const response = await checkWord(trimmedGuess, sessionId, validWords);
 
-      // Handle invalid words or rate limiting
-      if (response.error) {
-        toast.error(response.error);
+      const response = await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word: trimmedGuess })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        toast.error(error.message || 'Une erreur est survenue');
         setGuess('');
         focusInput();
         return;
       }
 
+      const { similarity, rank, solvers, totalPlayers, successRate } = await response.json();
+
       const newGuess: GuessData = {
-        word: response.word,
-        temperature: response.temperature,
+        word: trimmedGuess,
+        similarity,
+        rank,
         id: Date.now().toString(),
-        isNew: true
+        isNew: true,
+        timestamp: Date.now()
       };
+
+      // Add to guess history
+      setGuessHistory(prev => [...prev, trimmedGuess]);
+      setHistoryIndex(-1);
 
       setGameState(prev => ({
         ...prev,
         guesses: [newGuess, ...prev.guesses.map(g => ({ ...g, isNew: false }))],
+        found: similarity === 100
       }));
 
-      if (word && trimmedGuess.toLowerCase() === word.toLowerCase()) {
-        setGameState(prev => ({ ...prev, found: true }));
-        toast.success('Félicitations! Vous avez trouvé le mot!');
-        const { totalPlayers, foundToday } = await getTodaysStats();
-        setStats({ totalPlayers: Number(totalPlayers), foundToday: Number(foundToday) });
+      setStats({ solvers, totalPlayers, successRate });
+
+      if (similarity === 100) {
+        toast.success('Félicitations ! Vous avez trouvé le mot !');
       }
 
       setGuess('');
-      focusInput();
     } catch (error) {
-      toast.error('Une erreur est survenue. Veuillez réessayer.');
       console.error('Error checking word:', error);
+      toast.error('Une erreur est survenue');
       setGuess('');
-      focusInput();
     } finally {
       setIsLoading(false);
+      focusInput();
     }
   };
+
+  // Get latest guess and sort all guesses by rank
+  const latestGuess = guesses[0];
+  const sortedGuesses = [...guesses]
+    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
+    .map(guess => ({
+      ...guess,
+      isLastGuess: guess.id === latestGuess?.id
+    }));
+
+  const focusInput = useCallback(() => {
+    if (!found) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 10);
+    }
+  }, [found]);
+
+  // Handle keyboard events for guess history
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHistoryIndex(prev => {
+        const newIndex = prev + 1;
+        if (newIndex < guessHistory.length) {
+          setGuess(guessHistory[guessHistory.length - 1 - newIndex]);
+          return newIndex;
+        }
+        return prev;
+      });
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHistoryIndex(prev => {
+        if (prev > 0) {
+          const newIndex = prev - 1;
+          setGuess(guessHistory[guessHistory.length - 1 - newIndex]);
+          return newIndex;
+        } else if (prev === 0) {
+          setGuess('');
+          return -1;
+        }
+        return prev;
+      });
+    } else {
+      // Reset history index when typing
+      setHistoryIndex(-1);
+    }
+  }, [guessHistory]);
+
+  // Keep focus when window regains focus
+  useEffect(() => {
+    window.addEventListener('focus', focusInput);
+    return () => window.removeEventListener('focus', focusInput);
+  }, [focusInput]);
+
+  // Keep focus when clicking anywhere in the game
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.matches('input, textarea, [contenteditable]')) {
+        focusInput();
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [focusInput]);
+
+  // Focus input when component is ready
+  useEffect(() => {
+    focusInput();
+  }, [focusInput]);
+
+  // Handle keyboard events globally
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        !found &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA' &&
+        e.key.length === 1 &&
+        e.key.match(/[a-zA-Z]/)
+      ) {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setGuess(prev => prev + e.key);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [found]);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -231,43 +220,56 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0, roomCode, playerN
             <span className="text-base-content/70"> essais 🎲</span>
           </div>
           <div className="bg-gradient-to-br from-purple-100 to-indigo-100 rounded-lg px-4 py-2 shadow-lg border border-indigo-200">
-            <span className="font-semibold">{isClient ? stats.foundToday : foundToday}</span>
+            <span className="font-semibold">{isClient ? stats.solvers : foundToday}</span>
             <span className="text-base-content/70"> ont trouvé 🎉</span>
           </div>
           <div className="bg-gradient-to-br from-indigo-100 to-blue-100 rounded-lg px-4 py-2 shadow-lg border border-blue-200">
             <span className="font-semibold">
-              {isClient ? Math.round((stats.foundToday / stats.totalPlayers) * 100) : 0}%
+              {isClient ? Math.round(stats.successRate) : 0}%
             </span>
             <span className="text-base-content/70"> taux de réussite ⭐️</span>
           </div>
         </div>
-        {!roomCode && (
-          <button
-            onClick={() => setShowCreateRoomModal(true)}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 text-white font-medium hover:opacity-90 transition-opacity shadow-lg"
-          >
-            Créer une partie privée 🤝
-          </button>
-        )}
-        {roomCode && playerName && (
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            Joueur: {playerName} 👋
-          </div>
-        )}
       </header>
 
       <form onSubmit={handleGuess} className="mb-8">
-        <div className="flex gap-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={guess}
-            onChange={(e) => setGuess(e.target.value.toLowerCase())}
-            className="input input-bordered flex-1 bg-white shadow-sm focus:ring-2 focus:ring-primary"
-            placeholder="Entrez votre mot..."
-            disabled={found || isLoading}
-            autoComplete="off"
-          />
+        <div className="flex gap-2 relative">
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={guess}
+              onChange={(e) => setGuess(e.target.value.toLowerCase())}
+              onKeyDown={handleKeyDown}
+              className="input input-bordered w-full bg-white shadow-sm focus:ring-2 focus:ring-primary pl-10"
+              placeholder="Entrez votre mot..."
+              disabled={found || isLoading}
+              autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                className={`w-5 h-5 transition-transform ${historyIndex >= 0 ? 'rotate-180' : ''}`}
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M7 11l5-5m0 0l5 5m-5-5v12"
+                />
+              </svg>
+            </div>
+            {guessHistory.length > 0 && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                {historyIndex >= 0 ? `${historyIndex + 1}/${guessHistory.length}` : '↑ history'}
+              </div>
+            )}
+          </div>
           <button 
             type="submit" 
             className={`btn btn-primary shadow-lg hover:shadow-xl transform hover:scale-105 transition-all ${isLoading ? 'loading' : ''}`}
@@ -278,56 +280,105 @@ export const Game = ({ word, totalPlayers = 0, foundToday = 0, roomCode, playerN
         </div>
       </form>
 
-      <div className="space-y-2">
-        <AnimatePresence mode="popLayout">
-          {isClient && sortedGuesses.map((guess) => (
+      <div className="space-y-4">
+        {/* Latest guess section */}
+        {isClient && latestGuess && (
+          <div className="border-b border-gray-200 pb-4">
             <motion.div
-              key={guess.id}
+              key={latestGuess.id}
               layout
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.2 }}
               onAnimationComplete={focusInput}
-              className="bg-white rounded-lg shadow-sm p-2 transform hover:scale-[1.01] transition-transform"
+              className="bg-white rounded-lg shadow-sm p-2 transform hover:scale-[1.01] transition-transform ring-2 ring-primary/20"
             >
               <div className="flex justify-between items-center">
-                <span className="text-base font-medium">{guess.word}</span>
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-semibold ${getTemperatureColor(guess.temperature)}`}>
-                    {getTemperatureEmoji(guess.temperature)} {guess.temperature.toFixed(1)}°
+                  <span className="text-base font-medium text-primary">
+                    {latestGuess.word}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className={`text-sm font-semibold ${getTemperatureColor(latestGuess.similarity)}`}>
+                    {getTemperatureEmoji(latestGuess.similarity)} {latestGuess.similarity}°
+                  </span>
+                  <span className="text-sm font-medium text-gray-600">
+                    {formatRank(latestGuess.rank)}
                   </span>
                   <div className="w-24 bg-base-200 rounded-full h-2 overflow-hidden">
                     <motion.div
                       layout
-                      className={`h-2 rounded-full ${getProgressBarColor(guess.temperature)}`}
-                      initial={guess.isNew ? { width: 0 } : { width: `${guess.temperature}%` }}
-                      animate={{ width: `${guess.temperature}%` }}
+                      className={`h-2 rounded-full ${getProgressBarColor(latestGuess.similarity)}`}
+                      initial={latestGuess.isNew ? { width: 0 } : { width: `${latestGuess.rank ? (latestGuess.rank / 10) : 0}%` }}
+                      animate={{ width: `${latestGuess.rank ? (latestGuess.rank / 10) : 0}%` }}
                       transition={{ duration: 0.5 }}
                     />
                   </div>
                 </div>
               </div>
             </motion.div>
-          ))}
-        </AnimatePresence>
+          </div>
+        )}
+
+        {/* All guesses sorted by rank */}
+        <div className="space-y-2">
+          <AnimatePresence mode="popLayout">
+            {isClient && sortedGuesses.map((guess) => (
+              <motion.div
+                key={guess.id}
+                layout
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+                className={`bg-white rounded-lg shadow-sm p-2 transform hover:scale-[1.01] transition-transform ${
+                  guess.isLastGuess ? 'ring-1 ring-primary/10' : ''
+                }`}
+              >
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-base font-medium ${
+                      guess.isLastGuess ? 'text-primary/80' : ''
+                    }`}>
+                      {guess.word}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className={`text-sm font-semibold ${getTemperatureColor(guess.similarity)}`}>
+                      {getTemperatureEmoji(guess.similarity)} {guess.similarity}°
+                    </span>
+                    <span className="text-sm font-medium text-gray-600">
+                      {formatRank(guess.rank)}
+                    </span>
+                    <div className="w-24 bg-base-200 rounded-full h-2 overflow-hidden">
+                      <motion.div
+                        layout
+                        className={`h-2 rounded-full ${getProgressBarColor(guess.similarity)}`}
+                        initial={guess.isNew ? { width: 0 } : { width: `${guess.rank ? (guess.rank / 10) : 0}%` }}
+                        animate={{ width: `${guess.rank ? (guess.rank / 10) : 0}%` }}
+                        transition={{ duration: 0.5 }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
 
       <AnimatePresence>
         {found && (
           <GameOver
             guesses={guesses}
-            foundToday={stats.foundToday}
+            foundToday={stats.solvers}
             totalPlayers={stats.totalPlayers}
             onPlayAgain={() => window.location.reload()}
           />
         )}
       </AnimatePresence>
-
-      <CreateRoomModal
-        isOpen={showCreateRoomModal}
-        onClose={() => setShowCreateRoomModal(false)}
-      />
     </div>
   );
 };

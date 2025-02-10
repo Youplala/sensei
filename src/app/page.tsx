@@ -1,16 +1,12 @@
-import { Game } from "@/components/Game";
-import { getTodaysWord } from "@/lib/supabase";
+import { Game } from '@/components/Game';
+import { initializeGame } from '@/lib/initializeGame';
 
 export default async function Home() {
-  const { word, totalPlayers, foundToday } = await getTodaysWord();
+  const { todaysWord } = await initializeGame();
 
   return (
-    <main className="min-h-screen bg-base-100">
-      <Game
-        word={word}
-        totalPlayers={totalPlayers}
-        foundToday={foundToday}
-      />
+    <main className="min-h-screen">
+      <Game word={todaysWord} />
     </main>
   );
 }

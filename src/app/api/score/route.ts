@@ -1,48 +1,50 @@
-import { NextResponse } from 'next/server';
-import { GameMemoryCache } from '@/lib/gameCache';
-import { ensureGameInitialized } from '@/lib/globalSetup';
+import { NextRequest, NextResponse } from 'next/server';
+import { localGameStore } from '@/lib/localGameStore';
 
-export async function POST(request: Request) {
+interface RequestBody {
+  word: string;
+}
+
+export async function POST(request: NextRequest) {
   try {
-    await ensureGameInitialized();
-    
-    const { word } = await request.json();
-    
-    if (!word || typeof word !== 'string') {
+    const body: RequestBody = await request.json();
+    const { word } = body;
+
+    if (!word) {
       return NextResponse.json(
-        { error: 'Invalid word' },
+        { message: 'Word is required' },
         { status: 400 }
       );
     }
-    
-    const cache = GameMemoryCache.getInstance();
-    const rawScore = cache.getScore(word);
-    
-    if (rawScore === null) {
+
+    // Check if word is valid
+    if (!localGameStore.isValidWord(word)) {
       return NextResponse.json(
-        { error: 'Game not initialized' },
-        { status: 500 }
+        { message: `"${word}" n'est pas un mot valide` },
+        { status: 400 }
       );
     }
 
-    // Convert score to percentage
-    const score = Math.round(rawScore * 100);
-    const { solvers, totalPlayers } = cache.getStats();
+    // Calculate similarity score and rank
+    const result = await localGameStore.calculateSimilarity(word);
 
-    // If it's the correct word, increment solvers
-    if (score === 100) {
-      cache.incrementSolvers();
-    }
+    // Record the guess
+    localGameStore.recordGuess();
+
+    // Get current game stats
+    const guessCount = localGameStore.getGuessCount();
+    const topSimilarities = localGameStore.getTopSimilarities(10);
 
     return NextResponse.json({
-      score,
-      solvers,
-      totalPlayers
+      similarity: result.similarity,
+      rank: result.rank,
+      solvers: result.similarity === 100 ? guessCount : 0,
+      totalPlayers: 1,
     });
   } catch (error) {
-    console.error('Error processing score:', error);
+    console.error('Error processing guess:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { message: 'Internal server error' },
       { status: 500 }
     );
   }

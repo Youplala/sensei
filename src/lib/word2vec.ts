@@ -62,21 +62,3 @@ export async function calculateSimilarity(
   // Convert to percentage and ensure it's between 0 and 100
   return Math.max(0, Math.min(100, result * 100));
 }
-
-export function getTemperatureColor(similarity: number): string {
-  if (similarity >= 99) return 'text-green-600 font-bold';
-  if (similarity >= 80) return 'text-green-500';
-  if (similarity >= 60) return 'text-yellow-500';
-  if (similarity >= 40) return 'text-orange-500';
-  if (similarity >= 20) return 'text-red-500';
-  return 'text-gray-500';
-}
-
-export function getTemperatureEmoji(similarity: number): string {
-  if (similarity >= 99) return '🎯';
-  if (similarity >= 80) return '🔥';
-  if (similarity >= 60) return '😊';
-  if (similarity >= 40) return '😐';
-  if (similarity >= 20) return '❄️';
-  return '🧊';
-}

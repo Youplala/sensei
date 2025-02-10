@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getTopWords } from '@/lib/supabase';
+import { getGuessCount } from '@/lib/initializeGame';
 import confetti from 'canvas-confetti';
 import { getTemperatureColor } from '@/lib/utils';
 
 interface GameOverProps {
   guesses: Array<{
     word: string;
-    temperature: number;
+    similarity: number;
   }>;
   foundToday: number;
   totalPlayers: number;
@@ -23,8 +23,9 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
   const [topWords, setTopWords] = useState<TopWord[]>([]);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const userWords = new Set(guesses.map(g => g.word.toLowerCase()));
-  const sortedGuesses = [...guesses].sort((a, b) => b.temperature - a.temperature);
-  const averageTemp = guesses.reduce((acc, curr) => acc + curr.temperature, 0) / guesses.length;
+  const sortedGuesses = [...guesses].sort((a, b) => b.similarity - a.similarity);
+  const averageSim = guesses.reduce((acc, curr) => acc + curr.similarity, 0) / guesses.length;
+  const guessCount = getGuessCount();
 
   useEffect(() => {
     // Trigger confetti animation
@@ -65,8 +66,11 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
   useEffect(() => {
     const loadTopWords = async () => {
       try {
-        const words = await getTopWords();
-        setTopWords(words);
+        // Load top words from local storage
+        const storedTopWords = localStorage.getItem('topWords');
+        if (storedTopWords) {
+          setTopWords(JSON.parse(storedTopWords));
+        }
       } catch (error) {
         console.error('Error loading top words:', error);
       }
@@ -76,8 +80,8 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
 
   const stats = {
     attempts: guesses.length,
-    maxTemp: Math.max(...guesses.map(g => g.temperature)),
-    avgTemp: averageTemp,
+    maxSim: Math.max(...guesses.map(g => g.similarity)),
+    avgSim: averageSim,
   };
 
   return (
@@ -109,7 +113,7 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
             </div>
             <div className="stat bg-base-200 rounded-lg p-4">
               <div className="stat-title">Moyenne</div>
-              <div className="stat-value text-secondary">{stats.avgTemp.toFixed(1)}°</div>
+              <div className="stat-value text-secondary">{stats.avgSim.toFixed(1)}%</div>
             </div>
             <div className="stat bg-base-200 rounded-lg p-4">
               <div className="stat-title">Trouvé par</div>
@@ -160,7 +164,7 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
                         </span>
                       </div>
                       <span className="text-sm font-semibold">
-                        {(word.similarity_score).toFixed(1)}°
+                        {(word.similarity_score).toFixed(1)}%
                       </span>
                     </div>
                   ))}
@@ -184,8 +188,8 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
                         <span className="text-sm font-medium w-6">#{guesses.length - index}</span>
                         <span>{guess.word}</span>
                       </div>
-                      <span className={getTemperatureColor(guess.temperature)}>
-                        {guess.temperature.toFixed(1)}°
+                      <span className={getTemperatureColor(guess.similarity)}>
+                        {(guess.similarity * 100).toFixed(1)}%
                       </span>
                     </div>
                   ))}
