@@ -28,8 +28,6 @@ export function RoomContent({ code, word, totalPlayers, foundToday, name }: Room
             word={word}
             totalPlayers={totalPlayers}
             foundToday={foundToday}
-            roomCode={code}
-            playerName={name}
           />
         </div>
 
@@ -40,8 +38,6 @@ export function RoomContent({ code, word, totalPlayers, foundToday, name }: Room
               word={word}
               totalPlayers={totalPlayers}
               foundToday={foundToday}
-              roomCode={code}
-              playerName={name}
             />
           </div>
           <div className="col-span-1">

@@ -59,11 +59,6 @@ class LocalGameStore {
     console.log('LocalGameStore initialized with sample data');
   }
 
-  initializeWordList(words: string[]) {
-    // For development, we're using sample words
-    console.log('Using sample word list for development');
-  }
-
   getTodaysWord(date: string): string {
     // For development, always return 'semantic'
     const word = 'semantic';

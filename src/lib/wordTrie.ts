@@ -1,6 +1,5 @@
 interface TrieNode {
   [key: string]: TrieNode | boolean;
-  isEnd?: boolean;
 }
 
 export class WordTrie {
