@@ -1,12 +1,5 @@
 import { WordTrie } from './wordTrie';
 
-// Sample word list for development
-const SAMPLE_WORDS = [
-  'semantic', 'meaning', 'word', 'language', 'dictionary',
-  'syntax', 'grammar', 'vocabulary', 'definition', 'thesaurus',
-  'lexicon', 'phrase', 'sentence', 'speech', 'expression'
-];
-
 // Sample similarities with proximity ranks (0-1000)
 const SAMPLE_SIMILARITIES: Record<string, { similarity: number; rank: number }> = {
   'meaning': { similarity: 85, rank: 998 },
@@ -22,7 +15,9 @@ const SAMPLE_SIMILARITIES: Record<string, { similarity: number; rank: number }> 
   'phrase': { similarity: 45, rank: 400 },
   'sentence': { similarity: 40, rank: 300 },
   'speech': { similarity: 35, rank: 200 },
-  'expression': { similarity: 50, rank: 100 }
+  'expression': { similarity: 50, rank: 100 },
+  'semantic': { similarity: 100, rank: 1000 }
+
 };
 
 interface GameData {
@@ -38,7 +33,6 @@ interface SimilarityResult {
 
 class LocalGameStore {
   private wordTrie: WordTrie;
-  private wordList: string[];
   private similarities: Map<string, { similarity: number; rank: number }>;
   private gameData: GameData | null;
   private validWords: Set<string>;
@@ -46,13 +40,22 @@ class LocalGameStore {
   constructor() {
     // Initialize with sample data immediately
     this.wordTrie = new WordTrie();
-    this.wordList = SAMPLE_WORDS;
-    this.similarities = new Map(Object.entries(SAMPLE_SIMILARITIES));
-    this.gameData = null;
-    this.validWords = new Set(SAMPLE_WORDS);
+    this.similarities = new Map(
+      Object.entries(SAMPLE_SIMILARITIES).map(([word, data]) => [word.toLowerCase(), data])
+    );
+    
+    // Initialize game data with today's word
+    const today = new Date().toISOString().split('T')[0];
+    this.gameData = {
+      word: 'semantic',
+      date: today,
+      guessCount: 0
+    };
+    
+    this.validWords = new Set(Object.keys(SAMPLE_SIMILARITIES));
 
     // Initialize word trie with sample words
-    SAMPLE_WORDS.forEach(word => {
+    this.validWords.forEach(word => {
       this.wordTrie.add(word.toLowerCase());
     });
 

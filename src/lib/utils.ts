@@ -17,10 +17,8 @@ export const getTemperatureEmoji = (temp: number) => {
 };
 
 export const getProgressBarColor = (temp: number) => {
-  if (temp >= 70) return 'bg-red-500';
-  if (temp >= 50) return 'bg-orange-500';
-  if (temp >= 30) return 'bg-yellow-500';
-  return 'bg-blue-500';
+  if (temp >= 30) return 'progress-bar-gradient';
+  return 'progress-bar-cold';
 };
 
 export const formatRank = (rank: number | null): string => {

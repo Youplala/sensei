@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getGuessCount } from '@/lib/initializeGame';
 import confetti from 'canvas-confetti';
 import { getTemperatureColor } from '@/lib/utils';
+import SAMPLE_SIMILARITIES from '@/lib/SAMPLE_SIMILARITIES';
 
 interface GameOverProps {
   guesses: Array<{
     word: string;
     similarity: number;
+    rank: number;
   }>;
   foundToday: number;
   totalPlayers: number;
@@ -16,29 +18,51 @@ interface GameOverProps {
 
 interface TopWord {
   word: string;
-  similarity_score: number;
+  similarity: number;
+  rank: number;
 }
 
 export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: GameOverProps) {
+  const [mounted, setMounted] = useState(false);
+  const [showTopWords, setShowTopWords] = useState(false);
   const [topWords, setTopWords] = useState<TopWord[]>([]);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const userWords = new Set(guesses.map(g => g.word.toLowerCase()));
-  const sortedGuesses = [...guesses].sort((a, b) => b.similarity - a.similarity);
-  const averageSim = guesses.reduce((acc, curr) => acc + curr.similarity, 0) / guesses.length;
-  const guessCount = getGuessCount();
+
+  // Initialize stats after mount to avoid hydration mismatch
+  const [stats, setStats] = useState({ 
+    attempts: 0,
+    avgSim: 0
+  });
 
   useEffect(() => {
-    // Trigger confetti animation
+    setMounted(true);
+    // Calculate stats
+    const averageSim = guesses.reduce((acc, curr) => acc + curr.similarity, 0) / guesses.length;
+    setStats({
+      attempts: guesses.length,
+      avgSim: Math.round(averageSim)
+    });
+
+    // Fetch top 100 words from SAMPLE_SIMILARITIES and sort by rank
+    const allWords = Object.entries(SAMPLE_SIMILARITIES)
+      .map(([word, data]) => ({
+        word,
+        similarity: data.similarity,
+        rank: data.rank
+      }))
+      .sort((a, b) => b.rank - a.rank)
+      .slice(0, 100);
+    setTopWords(allWords);
+  }, [guesses]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     const duration = 3 * 1000;
     const animationEnd = Date.now() + duration;
 
-    const randomInRange = (min: number, max: number) => {
-      return Math.random() * (max - min) + min;
-    };
-
     const confettiInterval = setInterval(() => {
       const timeLeft = animationEnd - Date.now();
-
       if (timeLeft <= 0) {
         clearInterval(confettiInterval);
         return;
@@ -49,154 +73,105 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
         angle: 60,
         spread: 55,
         origin: { x: 0 },
-        colors: ['#ff0000', '#00ff00', '#0000ff'],
+        colors: ['#FF6B6B', '#4ECDC4', '#FFE66D'],
       });
       confetti({
         particleCount: 3,
         angle: 120,
         spread: 55,
         origin: { x: 1 },
-        colors: ['#ff0000', '#00ff00', '#0000ff'],
+        colors: ['#FF6B6B', '#4ECDC4', '#FFE66D'],
       });
     }, 150);
 
     return () => clearInterval(confettiInterval);
-  }, []);
+  }, [mounted]);
 
-  useEffect(() => {
-    const loadTopWords = async () => {
-      try {
-        // Load top words from local storage
-        const storedTopWords = localStorage.getItem('topWords');
-        if (storedTopWords) {
-          setTopWords(JSON.parse(storedTopWords));
-        }
-      } catch (error) {
-        console.error('Error loading top words:', error);
-      }
-    };
-    loadTopWords();
-  }, []);
+  if (!mounted) return null;
 
-  const stats = {
-    attempts: guesses.length,
-    maxSim: Math.max(...guesses.map(g => g.similarity)),
-    avgSim: averageSim,
-  };
+  const displayWords = showTopWords ? topWords : guesses.slice().reverse();
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50 p-4 overflow-y-auto"
-    >
-      <motion.div
-        initial={{ scale: 0.8, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.8, y: 20 }}
-        className="bg-white rounded-lg shadow-2xl max-w-2xl w-full mx-auto p-6"
-      >
-        <div className="text-center mb-8">
-          <motion.h2 
-            className="text-3xl font-bold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 0.5 }}
-          >
-            🎉 Félicitations! 🎉
-          </motion.h2>
+    <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-auto">
+        <div className="p-6">
+          <h2 className="text-3xl font-bold mb-6 text-primary flex items-center justify-center gap-2">
+            <span className="text-2xl">🎉</span>
+            <span className="text-rose-400">Félicitations!</span>
+            <span className="text-2xl">🎉</span>
+          </h2>
           
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="stat bg-base-200 rounded-lg p-4">
-              <div className="stat-title">Essais</div>
-              <div className="stat-value text-primary">{stats.attempts}</div>
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="stat bg-base-100 rounded-lg p-3 border border-base-200">
+              <div className="stat-title text-gray-600 text-sm">Essais</div>
+              <div className="stat-value text-rose-400 text-2xl">{stats.attempts}</div>
             </div>
-            <div className="stat bg-base-200 rounded-lg p-4">
-              <div className="stat-title">Moyenne</div>
-              <div className="stat-value text-secondary">{stats.avgSim.toFixed(1)}%</div>
+            <div className="stat bg-base-100 rounded-lg p-3 border border-base-200">
+              <div className="stat-title text-gray-600 text-sm">Moyenne</div>
+              <div className="stat-value text-teal-400 text-2xl">{stats.avgSim}%</div>
             </div>
-            <div className="stat bg-base-200 rounded-lg p-4">
-              <div className="stat-title">Trouvé par</div>
-              <div className="stat-value text-accent">{foundToday}/{totalPlayers}</div>
+            <div className="stat bg-base-100 rounded-lg p-3 border border-base-200">
+              <div className="stat-title text-gray-600 text-sm">Trouvé par</div>
+              <div className="stat-value text-emerald-400 text-2xl">{foundToday}/{totalPlayers}</div>
             </div>
           </div>
 
-          <div className="flex justify-center gap-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-gray-700">
+              {showTopWords ? 'Top 100 mots les plus proches' : 'Historique des essais'}
+            </h3>
             <button
-              className={`btn ${showLeaderboard ? 'btn-outline' : 'btn-primary'}`}
-              onClick={() => setShowLeaderboard(false)}
+              className="btn btn-sm btn-ghost"
+              onClick={() => setShowTopWords(!showTopWords)}
             >
-              📊 Statistiques
-            </button>
-            <button
-              className={`btn ${showLeaderboard ? 'btn-primary' : 'btn-outline'}`}
-              onClick={() => setShowLeaderboard(true)}
-            >
-              🏆 Top 100 closest words
+              {showTopWords ? '↺ Voir historique' : '🏆 Voir top 100'}
             </button>
           </div>
 
-          <AnimatePresence mode="wait">
-            {showLeaderboard ? (
-              <motion.div
-                key="leaderboard"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-h-96 overflow-y-auto"
-              >
-                <div className="grid grid-cols-1 gap-2">
-                  {topWords.map((word, index) => (
-                    <div
-                      key={word.word}
-                      className={`flex justify-between items-center p-2 rounded ${
-                        userWords.has(word.word.toLowerCase())
-                          ? 'bg-primary bg-opacity-10 border border-primary'
-                          : 'bg-base-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium w-6">#{index + 1}</span>
-                        <span className={`font-medium ${
-                          userWords.has(word.word.toLowerCase()) ? 'text-primary' : ''
-                        }`}>
-                          {word.word}
-                        </span>
-                      </div>
-                      <span className="text-sm font-semibold">
-                        {(word.similarity_score).toFixed(1)}%
-                      </span>
-                    </div>
-                  ))}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="max-h-80 overflow-y-auto border rounded-lg"
+          >
+            <div className="grid grid-cols-1 divide-y">
+              {displayWords.map((item, index) => (
+                <div
+                  key={item.word}
+                  className={`flex justify-between items-center p-2 ${
+                    userWords.has(item.word.toLowerCase()) 
+                      ? 'bg-rose-50' 
+                      : 'bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium w-6 text-gray-500">
+                      #{showTopWords ? index + 1 : displayWords.length - index}
+                    </span>
+                    <span className={`font-medium ${
+                      userWords.has(item.word.toLowerCase()) 
+                        ? 'text-rose-500' 
+                        : 'text-gray-700'
+                    }`}>
+                      {item.word}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-semibold ${
+                      userWords.has(item.word.toLowerCase())
+                        ? 'text-rose-500'
+                        : 'text-gray-600'
+                    }`}>
+                      {Math.min(item.similarity, 100).toFixed(1)}%
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      (#{item.rank})
+                    </span>
+                  </div>
                 </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="guesses"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-h-96 overflow-y-auto"
-              >
-                <div className="space-y-2">
-                  {sortedGuesses.map((guess, index) => (
-                    <div
-                      key={guess.word}
-                      className="flex items-center justify-between p-2 bg-base-100 rounded"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium w-6">#{guesses.length - index}</span>
-                        <span>{guess.word}</span>
-                      </div>
-                      <span className={getTemperatureColor(guess.similarity)}>
-                        {(guess.similarity * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              ))}
+            </div>
+          </motion.div>
 
           <div className="mt-6">
             <button
@@ -207,7 +182,7 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
             </button>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }

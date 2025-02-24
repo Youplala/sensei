@@ -6,6 +6,10 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
+  --progress-bar-hot-rgb: 239, 68, 68;
+  --progress-bar-warm-rgb: 249, 115, 22;
+  --progress-bar-mild-rgb: 234, 179, 8;
+  --progress-bar-cold-rgb: 59, 130, 246;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,4 +44,36 @@
 
 .progress-bar-fill {
   @apply h-full bg-primary transition-all duration-500 ease-out;
+}
+
+.progress-bar-gradient {
+  background: linear-gradient(to right, 
+    rgb(234, 179, 8),    /* yellow-500 at 0% */
+    rgb(249, 115, 22),   /* orange-500 at 50% */
+    rgb(239, 68, 68)     /* red-500 at 100% */
+  );
+}
+
+.progress-bar-cold {
+  background-color: rgb(59, 130, 246); /* blue-500 */
+}
+
+.animate-fill {
+  transform-origin: left;
+  animation: fillProgress 1.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes fillProgress {
+  0% {
+    transform: scaleX(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleX(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
 }
