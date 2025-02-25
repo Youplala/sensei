@@ -10,6 +10,7 @@ interface GameOverProps {
     word: string;
     similarity: number;
     rank: number;
+    id: string;
   }>;
   foundToday: number;
   totalPlayers: number;

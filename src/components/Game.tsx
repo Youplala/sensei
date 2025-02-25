@@ -37,6 +37,7 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
   const [stats, setStats] = useState({
     solvers: foundToday,
     totalPlayers,
+    successRate: 0,
   });
 
   // Initialize game state
@@ -121,7 +122,11 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
         found: similarity === 100,
       }));
 
-      setStats({ solvers, totalPlayers, successRate });
+      setStats((prev) => ({
+        solvers,
+        totalPlayers,
+        successRate: Math.round((solvers / totalPlayers) * 100),
+      }));
 
       if (similarity === 100) {
         toast.success("Félicitations ! Vous avez trouvé le mot !");
@@ -392,7 +397,10 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
       <AnimatePresence>
         {found && (
           <GameOver
-            guesses={guesses}
+            guesses={guesses
+              .filter((g): g is { word: string; similarity: number; rank: number; id: string } => 
+                g.rank !== null && typeof g.rank === 'number'
+              )}
             foundToday={stats.solvers}
             totalPlayers={stats.totalPlayers}
             onPlayAgain={() => {
