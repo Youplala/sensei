@@ -106,14 +106,14 @@ export async function GET(request: NextRequest) {
       const cleanScriptPath = path.join(rootDir, 'scripts', 'clean_wordlist.py');
       
       // Run the clean_wordlist.py script
-      await execAsync(`python ${cleanScriptPath} --input ${path.join(rootDir, 'public', 'data', 'wordlist.tsv')} --output ${wordlistPath}`);
+      await execAsync(`python3 ${cleanScriptPath} --input ${path.join(rootDir, 'public', 'data', 'wordlist.tsv')} --output ${wordlistPath}`);
     }
     
     // In a production environment, we'd use a Python virtual environment
     // For simplicity in this example, we'll use the system Python
     console.log('Running generate_daily_word.py...');
     try {
-      const { stdout, stderr } = await execAsync(`python ${scriptPath}`);
+      const { stdout, stderr } = await execAsync(`python3 ${scriptPath}`);
       
       // Check if stderr contains actual errors or just progress output
       const hasRealError = stderr && 
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
             { 
               error: 'Failed to generate daily word', 
               details: stderr,
-              command: `python ${scriptPath}`,
+              command: `python3 ${scriptPath}`,
               cwd: process.cwd()
             },
             { status: 500 }
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
           { 
             error: 'Failed to execute Python script', 
             details: execError instanceof Error ? execError.message : String(execError),
-            command: `python ${scriptPath}`,
+            command: `python3 ${scriptPath}`,
             cwd: process.cwd(),
             path: process.env.PATH
           },
