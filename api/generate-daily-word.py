@@ -1,33 +1,28 @@
 from http.server import BaseHTTPRequestHandler
-import sys
 import os
+import sys
 import json
-import datetime
-import shutil
+import subprocess
+from datetime import datetime
 from pathlib import Path
-
-# Add the scripts directory to the Python path so we can import the generate_daily_word module
-root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-scripts_dir = os.path.join(root_dir, 'scripts')
-sys.path.append(scripts_dir)
-
-# Import the generate_daily_word module
-import generate_daily_word
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        # Security checks
+        is_vercel_cron = os.environ.get('VERCEL_CRON') == '1'
+        is_development = os.environ.get('NODE_ENV') == 'development'
+        
+        # Only proceed if it's a Vercel cron job or we're in development
+        if not (is_vercel_cron or is_development):
+            self.send_response(401)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Unauthorized"}).encode('utf-8'))
+            return
+        
         try:
-            # Check authorization (similar to what we do in the TypeScript version)
-            is_vercel_cron = os.environ.get('VERCEL_CRON') == '1'
-            is_development = os.environ.get('NODE_ENV') == 'development'
-            
-            # For simplicity, we'll allow the function to run in development or when triggered by Vercel cron
-            if not (is_vercel_cron or is_development):
-                self.send_response(401)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': 'Unauthorized'}).encode('utf-8'))
-                return
+            # Get the root directory (base of the project)
+            root_dir = os.getcwd()
             
             # Ensure the data directory exists
             data_dir = os.path.join(root_dir, 'public', 'data')
@@ -39,48 +34,68 @@ class handler(BaseHTTPRequestHandler):
             
             if not os.path.exists(history_path) and os.path.exists(seed_path):
                 print('Copying history.json.seed to history.json')
-                shutil.copyfile(seed_path, history_path)
+                with open(seed_path, 'r') as seed_file:
+                    seed_content = seed_file.read()
+                with open(history_path, 'w') as history_file:
+                    history_file.write(seed_content)
             
-            # Run the generate_daily_word functionality directly
-            date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+            # Path to the Python script
+            script_path = os.path.join(root_dir, 'scripts', 'generate_daily_word.py')
             
-            # Load wordlist
+            # Check if we need to run the clean_wordlist script first
             wordlist_path = os.path.join(data_dir, 'semantle_wordlist.txt')
-            wordlist = generate_daily_word.load_wordlist(wordlist_path)
+            if not os.path.exists(wordlist_path):
+                print('Wordlist not found, running clean_wordlist.py first...')
+                clean_script_path = os.path.join(root_dir, 'scripts', 'clean_wordlist.py')
+                
+                # Run the clean_wordlist.py script
+                subprocess.run([
+                    sys.executable, 
+                    clean_script_path, 
+                    '--input', os.path.join(root_dir, 'public', 'data', 'wordlist.tsv'),
+                    '--output', wordlist_path
+                ], check=True)
             
-            # Load history
-            history = generate_daily_word.load_history(history_path)
+            # Run the generate_daily_word.py script
+            print('Running generate_daily_word.py...')
+            result = subprocess.run(
+                [sys.executable, script_path],
+                capture_output=True,
+                text=True,
+                check=False
+            )
             
-            # Pick a daily word
-            daily_word = generate_daily_word.pick_daily_word(wordlist, history, date_str)
+            # Check if stderr contains actual errors or just progress output
+            stderr = result.stderr
+            has_real_error = stderr and \
+                not ('UserWarning' in stderr or 'Processing words:' in stderr or 'Computing similarities:' in stderr)
             
-            # Update history
-            generate_daily_word.update_history(history, date_str, daily_word, history_path)
+            if result.returncode != 0 or has_real_error:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "error": "Failed to generate daily word",
+                    "details": stderr
+                }).encode('utf-8'))
+                return
             
-            # Compute similarities
-            nlp = generate_daily_word.load_spacy_model()
-            similarities = generate_daily_word.compute_similarities(nlp, daily_word, wordlist, 0.3)
-            
-            # Save daily word and similarities
-            daily_path = os.path.join(data_dir, 'daily.json')
-            generate_daily_word.save_daily_word(daily_word, similarities, date_str, daily_path)
-            
-            # Return success response
+            # Success response
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({
-                'success': True,
-                'message': f'Daily word generated for {date_str}',
-                'word': daily_word
+                "success": True,
+                "message": "Daily word generated successfully",
+                "details": result.stdout,
+                "stderr": result.stderr
             }).encode('utf-8'))
             
         except Exception as e:
-            # Handle errors
             self.send_response(500)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({
-                'error': 'Failed to generate daily word',
-                'details': str(e)
+                "error": "Internal server error",
+                "details": str(e)
             }).encode('utf-8'))

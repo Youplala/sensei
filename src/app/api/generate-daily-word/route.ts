@@ -1,21 +1,11 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import path from 'path';
-import fs from 'fs';
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 
-const execAsync = promisify(exec);
-
-// Store the last run time in a variable that persists between requests
-// but is not shared between serverless function instances
-let lastGenerateDailyWordRun = 0;
-
 /**
- * This API route is designed to be called by a Vercel cron job
- * It runs the Python script to generate a new daily word and compute similarities
- * The results are stored in the public/data directory
+ * This API route is a proxy to the Python serverless function
+ * It's mainly used for local development since in production
+ * the Vercel cron job will call the Python function directly
  */
 export async function GET(request: NextRequest) {
   try {
@@ -62,114 +52,102 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Additional rate limiting to prevent abuse
-    // In a real app, you'd use a more sophisticated rate limiting approach
-    const now = Date.now();
-    const minInterval = 60 * 60 * 1000; // 1 hour in milliseconds
-    
-    if (now - lastGenerateDailyWordRun < minInterval && !isVercelCron && !isDevelopment) {
-      return NextResponse.json(
-        { error: 'Rate limited', message: 'This endpoint can only be called once per hour' },
-        { status: 429 }
-      );
-    }
-    
-    // Update last run time
-    lastGenerateDailyWordRun = now;
-
-    // Get the root directory of the project
-    const rootDir = process.cwd();
-    
-    // Ensure the data directory exists
-    const dataDir = path.join(rootDir, 'public', 'data');
-    if (!fs.existsSync(dataDir)) {
-      console.log(`Creating data directory: ${dataDir}`);
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    
-    // Check if history.json exists, if not, copy the seed file if available
-    const historyPath = path.join(dataDir, 'history.json');
-    const seedPath = path.join(dataDir, 'history.json.seed');
-    
-    if (!fs.existsSync(historyPath) && fs.existsSync(seedPath)) {
-      console.log('Copying history.json.seed to history.json');
-      fs.copyFileSync(seedPath, historyPath);
-    }
-    
-    // Path to the Python script
-    const scriptPath = path.join(rootDir, 'scripts', 'generate_daily_word.py');
-    
-    // Check if we need to run the clean_wordlist script first
-    const wordlistPath = path.join(dataDir, 'semantle_wordlist.txt');
-    if (!fs.existsSync(wordlistPath)) {
-      console.log('Wordlist not found, running clean_wordlist.py first...');
-      const cleanScriptPath = path.join(rootDir, 'scripts', 'clean_wordlist.py');
+    // In production, this route is not used (the Python function is called directly)
+    // In development, we need to run the Python script
+    if (isDevelopment) {
+      // Import these modules only in development
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const path = await import('path');
+      const fs = await import('fs');
       
-      // Run the clean_wordlist.py script
-      await execAsync(`python3 ${cleanScriptPath} --input ${path.join(rootDir, 'public', 'data', 'wordlist.tsv')} --output ${wordlistPath}`);
-    }
-    
-    // In a production environment, we'd use a Python virtual environment
-    // For simplicity in this example, we'll use the system Python
-    console.log('Running generate_daily_word.py...');
-    try {
-      const { stdout, stderr } = await execAsync(`python3 ${scriptPath}`);
+      const execAsync = promisify(exec);
       
-      // Check if stderr contains actual errors or just progress output
-      const hasRealError = stderr && 
-        !stderr.includes('UserWarning') && 
-        !stderr.includes('Processing words:') && 
-        !stderr.includes('Computing similarities:');
+      // Get the root directory of the project
+      const rootDir = process.cwd();
       
-      if (hasRealError) {
-        console.error('Error generating daily word:', stderr);
+      // Ensure the data directory exists
+      const dataDir = path.join(rootDir, 'public', 'data');
+      if (!fs.existsSync(dataDir)) {
+        console.log(`Creating data directory: ${dataDir}`);
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      
+      // Check if history.json exists, if not, copy the seed file if available
+      const historyPath = path.join(dataDir, 'history.json');
+      const seedPath = path.join(dataDir, 'history.json.seed');
+      
+      if (!fs.existsSync(historyPath) && fs.existsSync(seedPath)) {
+        console.log('Copying history.json.seed to history.json');
+        fs.copyFileSync(seedPath, historyPath);
+      }
+      
+      // Path to the Python script
+      const scriptPath = path.join(rootDir, 'scripts', 'generate_daily_word.py');
+      
+      // Check if we need to run the clean_wordlist script first
+      const wordlistPath = path.join(dataDir, 'semantle_wordlist.txt');
+      if (!fs.existsSync(wordlistPath)) {
+        console.log('Wordlist not found, running clean_wordlist.py first...');
+        const cleanScriptPath = path.join(rootDir, 'scripts', 'clean_wordlist.py');
         
-        // In development, return more detailed error information
-        if (isDevelopment) {
+        // Run the clean_wordlist.py script
+        await execAsync(`python ${cleanScriptPath} --input ${path.join(rootDir, 'public', 'data', 'wordlist.tsv')} --output ${wordlistPath}`);
+      }
+      
+      // In a production environment, we'd use a Python virtual environment
+      // For simplicity in this example, we'll use the system Python
+      console.log('Running generate_daily_word.py...');
+      try {
+        const { stdout, stderr } = await execAsync(`python ${scriptPath}`);
+        
+        // Check if stderr contains actual errors or just progress output
+        const hasRealError = stderr && 
+          !stderr.includes('UserWarning') && 
+          !stderr.includes('Processing words:') && 
+          !stderr.includes('Computing similarities:');
+        
+        if (hasRealError) {
+          console.error('Error generating daily word:', stderr);
+          
           return NextResponse.json(
             { 
               error: 'Failed to generate daily word', 
               details: stderr,
-              command: `python3 ${scriptPath}`,
+              command: `python ${scriptPath}`,
               cwd: process.cwd()
             },
             { status: 500 }
           );
         }
         
-        return NextResponse.json(
-          { error: 'Failed to generate daily word', details: stderr },
-          { status: 500 }
-        );
-      }
-      
-      return NextResponse.json({
-        success: true,
-        message: 'Daily word generated successfully',
-        details: stdout,
-        stderr: stderr // Include stderr for debugging in development
-      });
-    } catch (execError: unknown) {
-      console.error('Error executing Python script:', execError);
-      
-      // In development, return more detailed error information
-      if (isDevelopment) {
+        return NextResponse.json({
+          success: true,
+          message: 'Daily word generated successfully',
+          details: stdout,
+          stderr: stderr // Include stderr for debugging in development
+        });
+      } catch (execError: unknown) {
+        console.error('Error executing Python script:', execError);
+        
         return NextResponse.json(
           { 
             error: 'Failed to execute Python script', 
             details: execError instanceof Error ? execError.message : String(execError),
-            command: `python3 ${scriptPath}`,
+            command: `python ${scriptPath}`,
             cwd: process.cwd(),
             path: process.env.PATH
           },
           { status: 500 }
         );
       }
-      
-      return NextResponse.json(
-        { error: 'Failed to execute Python script', details: execError instanceof Error ? execError.message : String(execError) },
-        { status: 500 }
-      );
+    } else {
+      // In production, redirect to the Python serverless function
+      // This should never be called since the cron job calls the Python function directly
+      return NextResponse.json({
+        success: true,
+        message: 'In production, please use the Python serverless function directly'
+      });
     }
   } catch (error: unknown) {
     console.error('Error in generate-daily-word API route:', error);
