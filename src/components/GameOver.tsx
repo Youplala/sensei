@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { getGuessCount } from '@/lib/initializeGame';
+import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { getTemperatureColor } from '@/lib/utils';
-import SAMPLE_SIMILARITIES from '@/lib/SAMPLE_SIMILARITIES';
+import { localGameStore } from '@/lib/localGameStore';
 
 interface GameOverProps {
   guesses: Array<{
@@ -20,13 +18,14 @@ interface GameOverProps {
 interface TopWord {
   word: string;
   similarity: number;
-  rank: number;
+  rank: number | null;
 }
 
 export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: GameOverProps) {
   const [mounted, setMounted] = useState(false);
   const [showTopWords, setShowTopWords] = useState(false);
   const [topWords, setTopWords] = useState<TopWord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const userWords = new Set(guesses.map(g => g.word.toLowerCase()));
 
   // Initialize stats after mount to avoid hydration mismatch
@@ -44,16 +43,32 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
       avgSim: Math.round(averageSim)
     });
 
-    // Fetch top 100 words from SAMPLE_SIMILARITIES and sort by rank
-    const allWords = Object.entries(SAMPLE_SIMILARITIES)
-      .map(([word, data]) => ({
-        word,
-        similarity: data.similarity,
-        rank: data.rank
-      }))
-      .sort((a, b) => b.rank - a.rank)
-      .slice(0, 100);
-    setTopWords(allWords);
+    // Fetch top words from API
+    const fetchTopWords = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch('/api/top-words');
+        if (!response.ok) {
+          console.error('Failed to fetch top words:', response.status);
+          // Fallback to localGameStore if API fails
+          const storeTopWords = localGameStore.getTopSimilarities(100);
+          setTopWords(storeTopWords);
+          return;
+        }
+        
+        const data = await response.json();
+        setTopWords(data.slice(0, 100)); // Get top 100 words
+      } catch (error) {
+        console.error('Error fetching top words:', error);
+        // Fallback to localGameStore if API fails
+        const storeTopWords = localGameStore.getTopSimilarities(100);
+        setTopWords(storeTopWords);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTopWords();
   }, [guesses]);
 
   useEffect(() => {
@@ -124,8 +139,11 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
             <button
               className="btn btn-sm btn-ghost"
               onClick={() => setShowTopWords(!showTopWords)}
+              disabled={isLoading}
             >
-              {showTopWords ? '↺ Voir historique' : '🏆 Voir top 100'}
+              {isLoading ? 
+                'Chargement...' : 
+                (showTopWords ? '↺ Voir historique' : '🏆 Voir top 100')}
             </button>
           </div>
 
@@ -135,43 +153,49 @@ export function GameOver({ guesses, foundToday, totalPlayers, onPlayAgain }: Gam
             exit={{ opacity: 0 }}
             className="max-h-80 overflow-y-auto border rounded-lg"
           >
-            <div className="grid grid-cols-1 divide-y">
-              {displayWords.map((item, index) => (
-                <div
-                  key={item.word}
-                  className={`flex justify-between items-center p-2 ${
-                    userWords.has(item.word.toLowerCase()) 
-                      ? 'bg-rose-50' 
-                      : 'bg-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium w-6 text-gray-500">
-                      #{showTopWords ? index + 1 : displayWords.length - index}
-                    </span>
-                    <span className={`font-medium ${
+            {isLoading && showTopWords ? (
+              <div className="p-4 text-center text-gray-500">Chargement des mots...</div>
+            ) : (
+              <div className="grid grid-cols-1 divide-y">
+                {displayWords.map((item, index) => (
+                  <div
+                    key={item.word}
+                    className={`flex justify-between items-center p-2 ${
                       userWords.has(item.word.toLowerCase()) 
-                        ? 'text-rose-500' 
-                        : 'text-gray-700'
-                    }`}>
-                      {item.word}
-                    </span>
+                        ? 'bg-rose-50' 
+                        : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium w-6 text-gray-500">
+                        #{showTopWords ? index + 1 : displayWords.length - index}
+                      </span>
+                      <span className={`font-medium ${
+                        userWords.has(item.word.toLowerCase()) 
+                          ? 'text-rose-500' 
+                          : 'text-gray-700'
+                      }`}>
+                        {item.word}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${
+                        userWords.has(item.word.toLowerCase())
+                          ? 'text-rose-500'
+                          : 'text-gray-600'
+                      }`}>
+                        {item.similarity.toFixed(1)}%
+                      </span>
+                      {item.rank !== null && item.rank !== undefined && (
+                        <span className="text-xs text-gray-400">
+                          (#{item.rank})
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-sm font-semibold ${
-                      userWords.has(item.word.toLowerCase())
-                        ? 'text-rose-500'
-                        : 'text-gray-600'
-                    }`}>
-                      {Math.min(item.similarity, 100).toFixed(1)}%
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      (#{item.rank})
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </motion.div>
 
           <div className="mt-6">

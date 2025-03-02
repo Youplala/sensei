@@ -6,10 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "if [ \"$VERCEL\" = \"1\" ]; then pip3 install -r requirements.txt; fi"
   },
   "dependencies": {
-
     "@types/canvas-confetti": "^1.9.0",
     "@types/uuid": "^10.0.0",
     "canvas-confetti": "^1.9.3",

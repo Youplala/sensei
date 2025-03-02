@@ -20,6 +20,7 @@ interface GameProps {
 interface GuessData {
   word: string;
   similarity: number;
+  score: number;
   rank: number | null;
   id: string;
   isNew?: boolean;
@@ -54,7 +55,10 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
     if (saved) {
       setGameState(JSON.parse(saved));
     }
-  }, []);
+    
+    // Log the current word for debugging
+    console.log("Current word:", word);
+  }, [word]);
 
   // Save game state to localStorage whenever it changes
   useEffect(() => {
@@ -97,12 +101,13 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
         return;
       }
 
-      const { similarity, rank, solvers, totalPlayers, successRate } =
+      const { similarity, score, rank, solvers, totalPlayers, successRate } =
         await response.json();
 
       const newGuess: GuessData = {
         word: trimmedGuess,
         similarity,
+        score,
         rank,
         id: Date.now().toString(),
         isNew: true,
@@ -119,7 +124,7 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
           newGuess,
           ...prev.guesses.map((g) => ({ ...g, isNew: false })),
         ],
-        found: similarity === 100,
+        found: rank === 1000,
       }));
 
       setStats((prev) => ({
@@ -128,7 +133,7 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
         successRate: Math.round((solvers / totalPlayers) * 100),
       }));
 
-      if (similarity === 100) {
+      if (rank === 1000) {
         toast.success("Félicitations ! Vous avez trouvé le mot !");
       }
 
@@ -146,7 +151,7 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
   // Get latest guess and sort all guesses by rank
   const latestGuess = guesses[0];
   const sortedGuesses = [...guesses]
-    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
+    .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0))
     .map((guess) => ({
       ...guess,
       isLastGuess: guess.id === latestGuess?.id,
@@ -245,7 +250,7 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <header className="text-center mb-8">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent mb-4 animate-pulse">
-          Sensei 🎯
+          Sémantix 🎯
         </h1>
         <div className="flex justify-center items-center space-x-3 text-sm mb-4">
           <div className="bg-gradient-to-br from-pink-100 to-purple-100 rounded-lg px-4 py-2 shadow-lg border border-purple-200">
@@ -300,6 +305,7 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
         {/* Latest guess section */}
         {isClient && latestGuess && (
           <div className="border-b border-gray-200 pb-4">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider h2">Dernier essai</h3>
             <motion.div
               key={latestGuess.id}
               layout
@@ -321,20 +327,24 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
                     className={`text-sm font-semibold ${getTemperatureColor(latestGuess.similarity)}`}
                   >
                     {getTemperatureEmoji(latestGuess.similarity)}{" "}
-                    {latestGuess.similarity}°
+                    {latestGuess.similarity.toFixed(2)}°
                   </span>
-                  <span className="text-sm font-medium text-gray-600">
-                    {formatRank(latestGuess.rank)}
-                  </span>
-                  <div className="w-24 bg-base-200 rounded-full h-2 overflow-hidden">
-                    <div 
-                      key={latestGuess.id} 
-                      className={`h-2 rounded-full animate-fill ${getProgressBarColor(latestGuess.similarity)}`}
-                      style={{
-                        width: `${latestGuess.rank ? latestGuess.rank / 10 : 0}%`,
-                      }}
-                    />
-                  </div>
+                  {latestGuess.rank !== null && latestGuess.rank !== undefined && (
+                    <>
+                      <span className="text-sm font-medium text-gray-600">
+                        {formatRank(latestGuess.rank)}
+                      </span>
+                      <div className="w-24 bg-base-200 rounded-full h-2 overflow-hidden">
+                        <div 
+                          key={latestGuess.id} 
+                          className={`h-2 rounded-full animate-fill ${getProgressBarColor(latestGuess.similarity)}`}
+                          style={{
+                            width: `${(latestGuess.rank / 1000) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -372,20 +382,24 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
                         className={`text-sm font-semibold ${getTemperatureColor(guess.similarity)}`}
                       >
                         {getTemperatureEmoji(guess.similarity)}{" "}
-                        {guess.similarity}°
+                        {guess.similarity.toFixed(2)}°
                       </span>
-                      <span className="text-sm font-medium text-gray-600">
-                        {formatRank(guess.rank)}
-                      </span>
-                      <div className="w-24 bg-base-200 rounded-full h-2 overflow-hidden">
-                        <div 
-                          key={guess.id} 
-                          className={`h-2 rounded-full animate-fill ${getProgressBarColor(guess.similarity)}`}
-                          style={{
-                            width: `${guess.rank ? guess.rank / 10 : 0}%`,
-                          }}
-                        />
-                      </div>
+                      {guess.rank !== null && guess.rank !== undefined && (
+                        <>
+                          <span className="text-sm font-medium text-gray-600">
+                            {formatRank(guess.rank)}
+                          </span>
+                          <div className="w-24 bg-base-200 rounded-full h-2 overflow-hidden">
+                            <div 
+                              key={guess.id} 
+                              className={`h-2 rounded-full animate-fill ${getProgressBarColor(guess.similarity)}`}
+                              style={{
+                                width: `${(guess.rank / 1000) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -398,9 +412,13 @@ export const Game = ({ word, totalPlayers = 1, foundToday = 0 }: GameProps) => {
         {found && (
           <GameOver
             guesses={guesses
-              .filter((g): g is { word: string; similarity: number; rank: number; id: string } => 
-                g.rank !== null && typeof g.rank === 'number'
-              )}
+              .filter((g) => g.rank !== null)
+              .map((g) => ({
+                word: g.word,
+                similarity: g.similarity,
+                rank: g.rank as number,
+                id: g.id
+              }))}
             foundToday={stats.solvers}
             totalPlayers={stats.totalPlayers}
             onPlayAgain={() => {

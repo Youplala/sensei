@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/generate-daily-word",
+      "schedule": "0 0 * * *"
+    }
+  ],
+  "buildCommand": "chmod +x ./vercel-build.sh && ./vercel-build.sh",
+  "installCommand": "npm install",
+  "env": {
+    "VERCEL_CRON": "1",
+    "PYTHON_VERSION": "3.9"
+  }
+}

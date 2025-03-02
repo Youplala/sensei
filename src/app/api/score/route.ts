@@ -27,16 +27,22 @@ export async function POST(request: NextRequest) {
 
     // Calculate similarity score and rank
     const result = await localGameStore.calculateSimilarity(word);
+    
+    if (!result) {
+      return NextResponse.json(
+        { message: `Erreur lors du calcul de la similarité pour "${word}"` },
+        { status: 400 }
+      );
+    }
 
     // Record the guess
     localGameStore.recordGuess();
 
     // Get current game stats
     const guessCount = localGameStore.getGuessCount();
-    const topSimilarities = localGameStore.getTopSimilarities(10);
 
     return NextResponse.json({
-      similarity: result.similarity,
+      similarity: result.similarity, // Already in percentage format (0-100)
       rank: result.rank,
       solvers: result.similarity === 100 ? guessCount : 0,
       totalPlayers: 1,

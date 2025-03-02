@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+venv/
+
+# Dynamic data files
+/public/data/daily.json
+/public/data/history.json
+
+# Keep static wordlists and seed files
+!/public/data/semantle_wordlist.txt
+!/public/data/wordlist.tsv
+!/public/data/history.json.seed

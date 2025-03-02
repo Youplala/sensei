@@ -4,7 +4,7 @@ import { localGameStore } from '@/lib/localGameStore';
 export async function GET() {
   try {
     
-    const topWords = localGameStore.getTopSimilarities(100);
+    const topWords = localGameStore.getTopSimilarities(1000);
     
     if (!topWords || topWords.length === 0) {
       console.error('No similarities found in store');

@@ -1,4 +1,6 @@
 import { localGameStore } from './localGameStore';
+import fs from 'fs';
+import path from 'path';
 
 export async function initializeGame() {
   try {
@@ -6,18 +8,37 @@ export async function initializeGame() {
     
     // Initialize today's word
     const todayDate = new Date().toISOString().split('T')[0];
-    const todaysWord = localGameStore.getTodaysWord(todayDate);
+    
+    // Try to read the daily.json file directly from the server
+    let dailyWord = null;
+    try {
+      // This only works on the server side
+      const dailyFilePath = path.join(process.cwd(), 'public', 'data', 'daily.json');
+      if (fs.existsSync(dailyFilePath)) {
+        const dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
+        dailyWord = dailyData.word;
+        console.log('Loaded daily word from file:', dailyWord);
+      }
+    } catch (error) {
+      console.error('Error reading daily.json file:', error);
+    }
+    
+    // If we couldn't read the file directly, use the localGameStore
+    if (!dailyWord) {
+      dailyWord = localGameStore.getTodaysWord();
+      console.log('Using word from localGameStore:', dailyWord);
+    }
 
-    if (!todaysWord) {
+    if (!dailyWord) {
       console.error('No word found for today');
       return { todaysWord: 'semantic' }; // Fallback word
     }
 
-    console.log('Game initialized successfully');
+    console.log('Game initialized successfully with word:', dailyWord);
     
     // Return current game state
     return { 
-      todaysWord,
+      todaysWord: dailyWord,
       guessCount: localGameStore.getGuessCount(),
       topSimilarities: localGameStore.getTopSimilarities(10)
     };
