@@ -64,7 +64,25 @@ class LocalGameStore {
           return;
         }
         
-        this.dailyData = await response.json();
+        const apiResponse = await response.json();
+        
+        // Server now only returns date and wordHash, not the actual word or similarities
+        // We need to read the daily.json file directly on the server side
+        if (apiResponse.date) {
+          // Store the API response data
+          this.dailyData = {
+            date: apiResponse.date,
+            word: '', // Word is not available from API
+            similarities: [] // Similarities are not available from API
+          };
+          
+          // Update game data with the date
+          this.gameData = {
+            word: '', // Word is not available from API
+            date: apiResponse.date,
+            guessCount: 0
+          };
+        }
       } else {
         // Server-side: Read file directly from filesystem
         try {
@@ -74,6 +92,28 @@ class LocalGameStore {
           
           if (fs.existsSync(dailyFilePath)) {
             this.dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
+            
+            // On server-side, we have access to the full data
+            // Update game data with the daily word
+            this.gameData = {
+              word: this.dailyData.word,
+              date: this.dailyData.date,
+              guessCount: 0
+            };
+            
+            // Update similarities map
+            if (this.dailyData.similarities) {
+              this.similarities.clear();
+              for (const sim of this.dailyData.similarities) {
+                this.similarities.set(sim.word, sim);
+              }
+            }
+            
+            // Update valid words set
+            this.validWords = new Set([
+              ...this.dailyData.similarities.map(s => s.word),
+              this.dailyData.word
+            ]);
           } else {
             console.log('Daily data file not found');
             return;
@@ -89,45 +129,77 @@ class LocalGameStore {
         return;
       }
       
-      console.log('Successfully loaded daily data:', this.dailyData.word);
-      
-      // Update game data with the daily word
-      this.gameData = {
-        word: this.dailyData.word,
-        date: this.dailyData.date,
-        guessCount: 0
-      };
-      
-      // Update similarities map and valid words
-      this.similarities.clear();
-      this.validWords.clear();
-      
-      // Add the daily word itself
-      this.validWords.add(this.dailyData.word.toLowerCase());
-      this.wordTrie.add(this.dailyData.word.toLowerCase());
-      
-      // Add the target word with perfect similarity
-      this.similarities.set(this.dailyData.word.toLowerCase(), {
-        word: this.dailyData.word.toLowerCase(),
-        similarity: 100,
-        rank: 1000
-      });
-      
-      // Add all similar words
-      this.dailyData.similarities.forEach((item) => {
-        const normalizedWord = item.word.toLowerCase();
-        this.validWords.add(normalizedWord);
-        this.wordTrie.add(normalizedWord);
-        this.similarities.set(normalizedWord, {
-          word: normalizedWord,
-          similarity: item.similarity, // No need to multiply by 100
-          rank: item.rank // Rank is already provided directly
-        });
-      });
-      
-      console.log(`Updated with ${this.validWords.size} valid words`);
+      console.log('Successfully loaded daily data for date:', this.dailyData.date);
     } catch (error) {
       console.error('Error loading daily data:', error);
+    }
+  }
+
+  public async calculateSimilarity(guess: string): Promise<SimilarityResult | null> {
+    if (!guess) return null;
+    
+    // Normalize the guess
+    guess = guess.toLowerCase().trim();
+    
+    // Check if we already have this similarity in our cache
+    if (this.similarities.has(guess)) {
+      return this.similarities.get(guess) || null;
+    }
+    
+    // If we're on the client side, we need to make an API call to verify the guess
+    if (typeof window !== 'undefined') {
+      try {
+        // Make an API call to verify the guess
+        const response = await fetch('/api/verify-guess', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ guess }),
+        });
+        
+        if (!response.ok) {
+          console.warn('Failed to verify guess:', response.status, response.statusText);
+          return null;
+        }
+        
+        const result = await response.json();
+        
+        if (result.similarity !== undefined) {
+          // Cache the result
+          const similarityResult: SimilarityResult = {
+            word: guess,
+            similarity: result.similarity,
+            rank: result.rank
+          };
+          
+          this.similarities.set(guess, similarityResult);
+          return similarityResult;
+        }
+        
+        return null;
+      } catch (error) {
+        console.error('Error verifying guess:', error);
+        return null;
+      }
+    } else {
+      // Server-side: we have direct access to the word and similarities
+      if (this.dailyData?.word === guess) {
+        return {
+          word: guess,
+          similarity: 100,
+          rank: 1
+        };
+      }
+      
+      // Check if we have this word in our similarities
+      for (const sim of this.dailyData?.similarities || []) {
+        if (sim.word === guess) {
+          return sim;
+        }
+      }
+      
+      return null;
     }
   }
 
@@ -136,23 +208,6 @@ class LocalGameStore {
       return '';
     }
     return this.gameData.word;
-  }
-
-  async calculateSimilarity(guess: string): Promise<SimilarityResult | null> {
-    if (!this.gameData || !this.gameData.word) {
-      return null;
-    }
-    
-    const normalizedGuess = guess.toLowerCase();
-    
-    // Check if the word exists in our similarities map
-    const result = this.similarities.get(normalizedGuess);
-    
-    if (!result) {
-      return null;
-    }
-    
-    return result;
   }
 
   isValidWord(word: string): boolean {

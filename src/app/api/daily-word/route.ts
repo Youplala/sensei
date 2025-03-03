@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +17,16 @@ export async function GET(request: NextRequest) {
     
     const dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
     
-    return NextResponse.json(dailyData);
+    // Create a hash of the word for verification purposes
+    // This allows the client to verify a guess without knowing the actual word
+    const wordHash = crypto.createHash('sha256').update(dailyData.word).digest('hex');
+    
+    // Return only the date and word hash, not the actual word or similarities
+    return NextResponse.json({
+      date: dailyData.date,
+      wordHash: wordHash,
+      // Don't include the actual word or similarities
+    });
   } catch (error) {
     console.error('Error fetching daily word:', error);
     return NextResponse.json(
