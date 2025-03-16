@@ -4,30 +4,18 @@
     {
       "src": "package.json",
       "use": "@vercel/next"
-    },
-    {
-      "src": "api/**/*.py",
-      "use": "@vercel/python"
     }
   ],
   "routes": [
-    {
-      "src": "/api/generate-daily-word",
-      "dest": "/api/generate-daily-word.py"
-    },
     {
       "src": "/(.*)",
       "dest": "/$1"
     }
   ],
-  "crons": [
-    {
-      "path": "/api/generate-daily-word",
-      "schedule": "0 0 * * *"
-    }
-  ],
+  "github": {
+    "silent": true
+  },
   "env": {
-    "VERCEL_CRON": "1",
-    "PYTHON_VERSION": "3.12"
+    "NEXT_PUBLIC_BASE_URL": "https://sensei-youplala.vercel.app"
   }
 }

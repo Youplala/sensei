@@ -33,9 +33,9 @@ export async function POST(request: NextRequest) {
     // Check if the guess is the target word
     if (normalizedGuess === dailyData.word.toLowerCase()) {
       return NextResponse.json({
-        word: normalizedGuess,
         similarity: 100,
-        rank: 1
+        rank: 1000,
+        isCorrect: true
       });
     }
     
@@ -46,17 +46,17 @@ export async function POST(request: NextRequest) {
     
     if (similarityResult) {
       return NextResponse.json({
-        word: normalizedGuess,
         similarity: similarityResult.similarity,
-        rank: similarityResult.rank
+        rank: similarityResult.rank,
+        isCorrect: false
       });
     }
     
     // If not found, return a default response
     return NextResponse.json({
-      word: normalizedGuess,
       similarity: 0,
-      rank: null
+      rank: null,
+      isCorrect: false
     });
   } catch (error) {
     console.error('Error verifying guess:', error);

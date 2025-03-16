@@ -1,0 +1,39 @@
+# Development files
+.git
+.github
+.vscode
+.next/cache
+
+# Node modules - should be installed by Vercel during deployment
+node_modules/
+
+# Data files that are managed by GitHub Actions
+# These will be deployed separately by the daily-word-generation workflow
+scripts/
+python/
+api/
+
+# Large data files not needed for the main application
+public/data/wordlist.tsv
+public/data/semantle_wordlist.txt
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Testing
+__tests__
+*.test.*
+jest.config.*
+
+# TypeScript source maps
+*.js.map
+*.d.ts.map
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

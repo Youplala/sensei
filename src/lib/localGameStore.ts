@@ -170,7 +170,7 @@ class LocalGameStore {
         if (result.similarity !== undefined) {
           // Cache the result
           const similarityResult: SimilarityResult = {
-            word: guess,
+            word: guess, // Use the guess as the word since API no longer returns it
             similarity: result.similarity,
             rank: result.rank
           };
@@ -190,7 +190,7 @@ class LocalGameStore {
         return {
           word: guess,
           similarity: 100,
-          rank: 1
+          rank: 1000
         };
       }
       
