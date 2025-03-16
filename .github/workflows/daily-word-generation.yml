@@ -6,15 +6,18 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:  # Allow manual triggering
 
+# Use GitHub's built-in token for authentication
+permissions:
+  contents: write
+  deployments: write
+
 jobs:
-  generate-daily-word:
+  generate-and-deploy:
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # Fetch all history for proper versioning
         
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -22,14 +25,21 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
           
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
       - name: Generate daily word
+        run: python scripts/generate_daily_word.py
+          
+      - name: Commit and push changes
         run: |
-          python scripts/generate_daily_word.py
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/daily.json public/data/history.json
+          git commit -m "Update daily word for $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push
           
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -39,41 +49,17 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel
           
-      - name: Configure Git
-        run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-          
-      - name: Set up SSH key
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
-          
-      - name: Add GitHub to known hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          
-      - name: Commit and push changes
-        run: |
-          git remote set-url origin git@github.com:Youplala/sensei.git
-          git add public/data/daily.json public/data/history.json
-          git commit -m "Update daily word for $(date +'%Y-%m-%d')" || echo "No changes to commit"
-          git push origin HEAD:main
-          
-      - name: Deploy to Vercel
+      - name: Deploy data files to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
-          # Create a temporary directory for the deployment
+          # Create a minimal deployment with only the data files
           mkdir -p deploy/public/data
-          
-          # Copy the generated data files
           cp public/data/daily.json deploy/public/data/
           cp public/data/history.json deploy/public/data/
           
-          # Deploy only the data files to Vercel
+          # Deploy only the data files
           cd deploy
           vercel --token $VERCEL_TOKEN --prod --yes

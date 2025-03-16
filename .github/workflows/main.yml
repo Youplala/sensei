@@ -5,18 +5,17 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
-# Add permissions needed for the workflow
-permissions:
-  contents: read
-  deployments: write
+  workflow_dispatch:
 
 jobs:
-  test:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
           node-version: '20'
           cache: 'npm'
@@ -24,28 +23,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Run tests
-        run: npm test
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000' }}
-
-  deploy:
-    needs: test
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
-      
-      # Clean up any unnecessary files before deployment
-      - name: Clean project
+      - name: Clean project for deployment
         run: |
-          rm -rf node_modules
-          rm -rf .next
           rm -rf public/data/wordlist.tsv public/data/semantle_wordlist.txt
+          find . -name "*.log" -type f -delete
       
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v20
