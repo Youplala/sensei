@@ -13,11 +13,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for proper versioning
         
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+          cache: 'pip'
           
       - name: Install dependencies
         run: |
@@ -28,19 +31,35 @@ jobs:
         run: |
           python scripts/generate_daily_word.py
           
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+          
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          
+      - name: Commit and push changes
+        run: |
+          git add public/data/daily.json public/data/history.json
+          git commit -m "Update daily word for $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push
+          
       - name: Deploy to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
-          # Install Vercel CLI
-          npm install -g vercel
-          
           # Create a temporary directory for the deployment
           mkdir -p deploy/public/data
           
-          # Copy the generated daily.json file
+          # Copy the generated data files
           cp public/data/daily.json deploy/public/data/
           cp public/data/history.json deploy/public/data/
           

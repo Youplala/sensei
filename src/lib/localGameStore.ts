@@ -95,25 +95,27 @@ class LocalGameStore {
             
             // On server-side, we have access to the full data
             // Update game data with the daily word
-            this.gameData = {
-              word: this.dailyData.word,
-              date: this.dailyData.date,
-              guessCount: 0
-            };
-            
-            // Update similarities map
-            if (this.dailyData.similarities) {
-              this.similarities.clear();
-              for (const sim of this.dailyData.similarities) {
-                this.similarities.set(sim.word, sim);
+            if (this.dailyData) {
+              this.gameData = {
+                word: this.dailyData.word,
+                date: this.dailyData.date,
+                guessCount: 0
+              };
+              
+              // Update similarities map
+              if (this.dailyData.similarities) {
+                this.similarities.clear();
+                for (const sim of this.dailyData.similarities) {
+                  this.similarities.set(sim.word, sim);
+                }
               }
+              
+              // Update valid words set
+              this.validWords = new Set([
+                ...(this.dailyData.similarities || []).map(s => s.word),
+                this.dailyData.word
+              ]);
             }
-            
-            // Update valid words set
-            this.validWords = new Set([
-              ...this.dailyData.similarities.map(s => s.word),
-              this.dailyData.word
-            ]);
           } else {
             console.log('Daily data file not found');
             return;
@@ -193,7 +195,8 @@ class LocalGameStore {
       }
       
       // Check if we have this word in our similarities
-      for (const sim of this.dailyData?.similarities || []) {
+      const similarities = this.dailyData?.similarities || [];
+      for (const sim of similarities) {
         if (sim.word === guess) {
           return sim;
         }
