@@ -9,10 +9,9 @@ on:
 # Use GitHub's built-in token for authentication
 permissions:
   contents: write
-  deployments: write
 
 jobs:
-  generate-and-deploy:
+  generate-and-commit:
     runs-on: ubuntu-latest
     
     steps:
@@ -40,26 +39,3 @@ jobs:
           git add public/data/daily.json public/data/history.json
           git commit -m "Update daily word for $(date +'%Y-%m-%d')" || echo "No changes to commit"
           git push
-          
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-          
-      - name: Install Vercel CLI
-        run: npm install -g vercel
-          
-      - name: Deploy data files to Vercel
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        run: |
-          # Create a minimal deployment with only the data files
-          mkdir -p deploy/public/data
-          cp public/data/daily.json deploy/public/data/
-          cp public/data/history.json deploy/public/data/
-          
-          # Deploy only the data files
-          cd deploy
-          vercel --token $VERCEL_TOKEN --prod --yes
