@@ -65,18 +65,6 @@ async function loadDailyData(): Promise<DailyData | null> {
   }
 }
 
-// Add OPTIONS method to handle preflight requests
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Allow': 'GET, OPTIONS',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
-}
-
 export async function GET() {
   try {
     // Ensure daily data is loaded
@@ -103,3 +91,15 @@ export async function GET() {
     );
   }
 }
+
+// Handle all other HTTP methods
+export async function POST() {
+  return NextResponse.json(
+    { message: 'This endpoint only accepts GET requests' },
+    { status: 405 }
+  );
+}
+
+export const PUT = POST;
+export const DELETE = POST;
+export const PATCH = POST;

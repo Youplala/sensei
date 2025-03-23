@@ -76,16 +76,12 @@ async function loadDailyData(): Promise<DailyData | null> {
 // Initialize data at server startup
 loadDailyData();
 
-// Add OPTIONS method to handle preflight requests
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Allow': 'POST, OPTIONS',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    },
-  });
+// Handle all HTTP methods
+export async function GET() {
+  return NextResponse.json(
+    { message: 'This endpoint only accepts POST requests' },
+    { status: 405 }
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -158,3 +154,8 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Handle all other HTTP methods
+export const PUT = GET;
+export const DELETE = GET;
+export const PATCH = GET;
