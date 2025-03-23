@@ -1,21 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { get } from '@vercel/blob';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    // Get the daily word data from the file
-    const dailyFilePath = path.join(process.cwd(), 'public', 'data', 'daily.json');
+    // Get the daily word data from Vercel Blob Storage
+    const blob = await get('daily.json');
     
-    if (!fs.existsSync(dailyFilePath)) {
+    if (!blob) {
       return NextResponse.json(
         { error: 'Daily word data not found' },
         { status: 404 }
       );
     }
     
-    const dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
+    // Read the blob content as JSON
+    const dailyData = await blob.json();
     
     // Create a hash of the word for verification purposes
     // This allows the client to verify a guess without knowing the actual word

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { get } from '@vercel/blob';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,17 +14,18 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Get the daily word data from the file
-    const dailyFilePath = path.join(process.cwd(), 'public', 'data', 'daily.json');
+    // Get the daily word data from Vercel Blob Storage
+    const blob = await get('daily.json');
     
-    if (!fs.existsSync(dailyFilePath)) {
+    if (!blob) {
       return NextResponse.json(
         { error: 'Daily word data not found' },
         { status: 404 }
       );
     }
     
-    const dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
+    // Read the blob content as JSON
+    const dailyData = await blob.json();
     
     // Normalize the guess
     const normalizedGuess = guess.toLowerCase().trim();
