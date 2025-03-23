@@ -2,17 +2,11 @@
 import fs from 'fs';
 import path from 'path';
 import { put } from '@vercel/blob';
-import { fileURLToPath } from 'url';
-
-// Get the directory name in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function uploadToBlob() {
   try {
     // Read the daily.json file
-    const projectRoot = path.resolve(__dirname, '..');
-    const dailyFilePath = path.join(projectRoot, 'public', 'data', 'daily.json');
+    const dailyFilePath = path.join(process.cwd(), 'public', 'data', 'daily.json');
     
     if (!fs.existsSync(dailyFilePath)) {
       console.error('Daily word data file not found');
@@ -26,7 +20,7 @@ async function uploadToBlob() {
     console.log(`Uploading daily word data for ${date} to Vercel Blob Storage...`);
     
     // Upload the file with a consistent name (daily.json) and a date-specific name
-    const dailyContent = JSON.stringify(dailyData);
+    const dailyContent = Buffer.from(JSON.stringify(dailyData));
     
     // Upload with consistent name (latest)
     const latestBlob = await put('daily.json', dailyContent, {

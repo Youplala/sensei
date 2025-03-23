@@ -1,4 +1,5 @@
 import { WordTrie } from './wordTrie';
+import { list } from '@vercel/blob';
 
 interface GameData {
   word: string;
@@ -17,6 +18,10 @@ interface DailyData {
   word: string;
   similarities: Array<SimilarityResult>;
 }
+
+// Cache for daily data to avoid repeated blob fetches
+let cachedDailyData: DailyData | null = null;
+let cachedDate: string | null = null;
 
 class LocalGameStore {
   private wordTrie: WordTrie;
@@ -67,7 +72,6 @@ class LocalGameStore {
         const apiResponse = await response.json();
         
         // Server now only returns date and wordHash, not the actual word or similarities
-        // We need to read the daily.json file directly on the server side
         if (apiResponse.date) {
           // Store the API response data
           this.dailyData = {
@@ -84,44 +88,64 @@ class LocalGameStore {
           };
         }
       } else {
-        // Server-side: Read file directly from filesystem
+        // Server-side: Fetch from Vercel Blob Storage
         try {
-          const fs = require('fs');
-          const path = require('path');
-          const dailyFilePath = path.join(process.cwd(), 'public', 'data', 'daily.json');
+          // Check if we already have cached data for today
+          const today = new Date().toISOString().split('T')[0];
           
-          if (fs.existsSync(dailyFilePath)) {
-            this.dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
-            
-            // On server-side, we have access to the full data
-            // Update game data with the daily word
-            if (this.dailyData) {
-              this.gameData = {
-                word: this.dailyData.word,
-                date: this.dailyData.date,
-                guessCount: 0
-              };
-              
-              // Update similarities map
-              if (this.dailyData.similarities) {
-                this.similarities.clear();
-                for (const sim of this.dailyData.similarities) {
-                  this.similarities.set(sim.word, sim);
-                }
-              }
-              
-              // Update valid words set
-              this.validWords = new Set([
-                ...(this.dailyData.similarities || []).map(s => s.word),
-                this.dailyData.word
-              ]);
-            }
+          if (cachedDailyData && cachedDate === today) {
+            console.log('Using cached daily data');
+            this.dailyData = cachedDailyData;
           } else {
-            console.log('Daily data file not found');
-            return;
+            // Fetch from Vercel Blob Storage
+            const { blobs } = await list();
+            const dailyBlob = blobs.find(blob => blob.pathname === 'daily.json');
+            
+            if (!dailyBlob) {
+              console.warn('Daily blob not found in storage');
+              return;
+            }
+            
+            const response = await fetch(dailyBlob.url);
+            if (!response.ok) {
+              console.warn('Failed to fetch daily data from blob storage');
+              return;
+            }
+            
+            this.dailyData = await response.json();
+            
+            // Cache the data for future use
+            if (this.dailyData && this.dailyData.date) {
+              cachedDailyData = this.dailyData;
+              cachedDate = this.dailyData.date;
+            }
           }
-        } catch (fsError) {
-          console.error('Error reading daily data file:', fsError);
+          
+          // On server-side, we have access to the full data
+          // Update game data with the daily word
+          if (this.dailyData) {
+            this.gameData = {
+              word: this.dailyData.word,
+              date: this.dailyData.date,
+              guessCount: 0
+            };
+            
+            // Update similarities map
+            if (this.dailyData.similarities) {
+              this.similarities.clear();
+              for (const sim of this.dailyData.similarities) {
+                this.similarities.set(sim.word, sim);
+              }
+            }
+            
+            // Update valid words set
+            this.validWords = new Set([
+              ...(this.dailyData.similarities || []).map(s => s.word),
+              this.dailyData.word
+            ]);
+          }
+        } catch (error) {
+          console.error('Error fetching daily data from blob storage:', error);
           return;
         }
       }

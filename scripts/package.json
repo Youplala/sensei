@@ -1,0 +1,7 @@
+{
+  "name": "sensei-scripts",
+  "version": "1.0.0",
+  "description": "Scripts for Sensei project",
+  "type": "module",
+  "private": true
+}
