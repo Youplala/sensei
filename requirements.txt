@@ -1,4 +1,0 @@
-spacy>=3.7.2
-numpy>=1.24.0
-tqdm>=4.66.1
-fr-core-news-lg @ https://github.com/explosion/spacy-models/releases/download/fr_core_news_lg-3.7.0/fr_core_news_lg-3.7.0-py3-none-any.whl

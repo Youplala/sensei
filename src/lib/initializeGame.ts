@@ -6,39 +6,53 @@ export async function initializeGame() {
   try {
     console.log('Initializing game...');
     
-    // Initialize today's word
-    const todayDate = new Date().toISOString().split('T')[0];
-    
     // Try to read the daily.json file directly from the server
     let dailyWord = null;
-    try {
-      // This only works on the server side
-      const dailyFilePath = path.join(process.cwd(), 'public', 'data', 'daily.json');
-      if (fs.existsSync(dailyFilePath)) {
-        const dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
-        dailyWord = dailyData.word;
-        console.log('Loaded daily word from file:', dailyWord);
+    if (typeof window === 'undefined') {
+      try {
+        const dailyFilePath = path.join(process.cwd(), 'public', 'data', 'daily.json');
+        if (fs.existsSync(dailyFilePath)) {
+          const dailyData = JSON.parse(fs.readFileSync(dailyFilePath, 'utf8'));
+          dailyWord = dailyData.word;
+        }
+      } catch (error) {
+        console.error('Error reading daily.json file:', error);
       }
-    } catch (error) {
-      console.error('Error reading daily.json file:', error);
     }
     
-    // If we couldn't read the file directly, use the localGameStore
-    if (!dailyWord) {
-      dailyWord = localGameStore.getTodaysWord();
-      console.log('Using word from localGameStore:', dailyWord);
-    }
-
-    if (!dailyWord) {
-      console.error('No word found for today');
+    // Wait for the localGameStore to load the daily data
+    await new Promise(resolve => {
+      if (localGameStore.isDataLoaded()) {
+        resolve(true);
+        return;
+      }
+      
+      const checkInterval = setInterval(() => {
+        if (localGameStore.isDataLoaded()) {
+          clearInterval(checkInterval);
+          resolve(true);
+        }
+      }, 100);
+      
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve(false);
+      }, 5000);
+    });
+    
+    // For client-side, we don't need the actual word
+    const isDataLoaded = localGameStore.isDataLoaded();
+    
+    if (!isDataLoaded && !dailyWord) {
+      console.error('No word data loaded for today');
       return { todaysWord: 'semantic' }; // Fallback word
     }
 
-    console.log('Game initialized successfully with word:', dailyWord);
+    console.log('Game initialized successfully');
     
     // Return current game state
     return { 
-      todaysWord: dailyWord,
+      todaysWord: dailyWord || 'hidden', // Only server-side will have the actual word
       guessCount: localGameStore.getGuessCount(),
       topSimilarities: localGameStore.getTopSimilarities(10)
     };
